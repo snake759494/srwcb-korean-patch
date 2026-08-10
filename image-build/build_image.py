@@ -12,7 +12,8 @@
     5. 메뉴 칸 정렬 교정 — THIRD.WAR / EX.WAR / TR.WAR (제2차 기준)
     6. 잔여 미번역 UI 보충 — TR 은 EX 에서 이식, 나머지는 도너 재배치
     7. 게임 선택 화면 그래픽(C_SMAP) 한글판
-    8. 레트일 + 이 19개 파일로 이미지 조립
+    8. 네 게임 실행파일의 한글 렌더러를 8px 반각 경로로 전환
+    9. 레트일 + 이 19개 파일로 이미지 조립
 
 각 단계는 크기를 안 바꾸거나(제자리·도너) 조립기가 위치를 다시 잡아 주므로
 서로 간섭하지 않는다.
@@ -34,8 +35,11 @@ for _sub in ("tools", "tools/graphics", "third-ui", "ex-ui", "tr-ui", "audit",
         _sys.path.append(_p)
 # ------------------------------------------------------------------
 import argparse
+import json
+import struct
 import subprocess
 import sys
+from dataclasses import asdict
 from pathlib import Path
 
 sys.path.insert(0, str(_P.TOOLS))
@@ -178,6 +182,42 @@ def step_menu(files):
         files[iso] = fixed[key]
 
 
+def step_halfwidth_ui_alignment(files):
+    """Restore cursor-relative settings columns after dynamic half-width values.
+
+    The verified wide-font build leaves the sound and BGM selectors one cell
+    wider each than the experimental renderer.  Those values are inserted by
+    F8, so static-span padding cannot see them.  Move the two following FC
+    anchors one cell right; all later controls then observe the same x as the
+    verified v0.11.19 screen while the visible values remain compact.
+    """
+
+    from patch_second_exe_ui import parse_second_ui_vm_record
+
+    layouts = {
+        "SECOND/SECOND.WAR": 0x24320,
+        "THIRD/THIRD.WAR": 0x247CC,
+        "EX/EX.WAR": 0x188C4,
+        "TR.WAR": 0x188BC,
+    }
+    source = bytes.fromhex("F8 04 FC FB 02 F8 06 FC F1 05")
+    patched = bytes.fromhex("F8 04 FC FC 02 F8 06 FC F2 05")
+    for name, header in layouts.items():
+        data = bytearray(files[name])
+        field = header + 4 + 39 * 4
+        target = field + struct.unpack_from("<i", data, field)[0]
+        end, _tokens = parse_second_ui_vm_record(data, target)
+        record = bytes(data[target:end])
+        if record.count(source) != 1 or record.count(patched):
+            raise SystemExit(
+                f"{name}: settings dynamic-anchor guard changed at 0x{target:X}"
+            )
+        record = record.replace(source, patched)
+        data[target:end] = record
+        files[name] = bytes(data)
+        print(f"  {name}: sound/BGM dynamic anchors +1/+1 cell")
+
+
 def step_third_ui(files):
     """제3차에 남아 있던 UI 잔재 (제보 #5)."""
     import fix_third_ui_leftovers as F3
@@ -201,6 +241,34 @@ def step_csmap(files):
     files["C_SMAP.BIN"] = need(CSMAP, "한글 C_SMAP").read_bytes()
 
 
+def step_halfwidth_renderer(files):
+    """Install the isolated 8px Hangul classifier after every donor writer."""
+    from halfwidth_hangul import patch_runtime_renderer
+
+    layouts = {
+        "SECOND/SECOND.WAR": 0x28058,
+        "THIRD/THIRD.WAR": 0x2872C,
+        "EX/EX.WAR": 0x1D544,
+        "TR.WAR": 0x1D520,
+    }
+    manifest = {}
+    for name, font_offset in layouts.items():
+        patched, report = patch_runtime_renderer(
+            files[name], executable_name=name, font_offset=font_offset
+        )
+        files[name] = patched
+        manifest[name] = asdict(report)
+        print(
+            f"  {name}: classifier@0x{report.classifier_offset:X} -> "
+            f"helper@0x{report.helper_offset:X} ({report.helper_size}B)"
+        )
+    manifest_path = _P.BUILD / "halfwidth_runtime_patch.json"
+    manifest_path.write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    print(f"  런타임 패치 명세 -> {manifest_path}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--version", default="v0.11.0")
@@ -208,24 +276,28 @@ def main():
     ap.add_argument("--skip-leftover", action="store_true")
     a = ap.parse_args()
 
-    print("[1/8] 빌드 결과 수집")
+    print("[1/9] 빌드 결과 수집")
     files = collect()
-    print("[2/8] 종료 메시지")
+    print("[2/9] 종료 메시지")
     step_quit(files)
-    print("[3/8] 이벤트 스크립트 포인터 재조준")
+    print("[3/9] 이벤트 스크립트 포인터 재조준")
     step_sce(files)
-    print("[4/8] 전투·사망 대사 줄바꿈")
+    print("[4/9] 전투·사망 대사 줄바꿈")
     step_battle(files)
-    print("[5/8] 메뉴 칸 정렬")
+    print("[5/9] 메뉴 칸 정렬")
     step_menu(files)
-    print("[6/8] 잔여 미번역 UI")
+    print("[5b/9] 반각 동적 UI 정렬")
+    step_halfwidth_ui_alignment(files)
+    print("[6/9] 잔여 미번역 UI")
     step_third_ui(files)
     if a.skip_leftover:
         print("  건너뜀")
     else:
         step_leftover(files)
-    print("[7/8] 게임 선택 화면 그래픽")
+    print("[7/9] 게임 선택 화면 그래픽")
     step_csmap(files)
+    print("[8/9] 한글 반각 런타임")
+    step_halfwidth_renderer(files)
 
     fin = _P.BUILD / "final"
     fin.mkdir(parents=True, exist_ok=True)
@@ -234,7 +306,7 @@ def main():
         q.write_bytes(v)
     print(f"  최종 파일 {len(files)}개 -> {fin}")
 
-    print("[8/8] 이미지 조립")
+    print("[9/9] 이미지 조립")
     out = a.out or (_P.OUT / f"Super Robot Taisen Complete Box Korean {a.version} (Track 1).bin")
     out.parent.mkdir(parents=True, exist_ok=True)
     AI.assemble(_P.disc(), out, files)

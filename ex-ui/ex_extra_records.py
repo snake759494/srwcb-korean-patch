@@ -26,6 +26,10 @@ if _d not in sys.path:
 import srwcb_paths as _P
 # ------------------------------------
 
+if str(_P.TOOLS) not in sys.path:
+    sys.path.insert(0, str(_P.TOOLS))
+from halfwidth_ui_layout import pad_simple_renderer_record
+
 SP = os.path.dirname(os.path.abspath(__file__))
 
 KANJI2KO = {"陸": "육", "空": "공", "水": "수", "宇": "우", "宙": "주",
@@ -125,6 +129,14 @@ def relocate_pointed_records(war, retail, enc_ko, arena_alloc, verbose=True):
         if field + struct.unpack_from("<i", war, field)[0] != x["off"]:
             skipped += 1; continue
         kb = enc_ko(_ko_to_rec(ko)) + b"\xFF"
+        try:
+            kb = pad_simple_renderer_record(retail[x["off"]:x["end"]], kb)
+        except ValueError as exc:
+            # Save/continue confirmations intentionally gain a Korean line
+            # break.  They are independent message boxes, not cursor-chained
+            # fields, so their reviewed line layout must remain unchanged.
+            if "line count changed" not in str(exc):
+                raise
         pos = arena_alloc(len(kb))
         war[pos:pos + len(kb)] = kb
         struct.pack_into("<i", war, field, pos - field)

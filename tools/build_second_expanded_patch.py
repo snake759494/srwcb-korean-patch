@@ -90,6 +90,11 @@ from second_translation_codec import (  # noqa: E402
     normalise_for_font,
     required_extra_characters,
 )
+from halfwidth_hangul import (  # noqa: E402
+    HANGUL_INK_WIDTH,
+    is_hangul_character,
+    validate_dynamic_hangul_mapping,
+)
 
 
 ROOT = _P.WORK
@@ -222,6 +227,7 @@ def build_dynamic_font(
 ) -> tuple[dict[str, int], dict[str, Any], Path | None]:
     base_map = load_safe_glyph_map()
     glyph_map = add_extra_glyph_mapping(base_map, extra_characters)
+    validate_dynamic_hangul_mapping(glyph_map)
     if not extra_characters:
         return glyph_map, {"extra_glyph_count": 0, "characters": []}, None
 
@@ -250,7 +256,10 @@ def build_dynamic_font(
     rows: list[dict[str, Any]] = []
     for ordinal, char in enumerate(extra_characters):
         index = EXTRA_GLYPH_START + ordinal
-        bitmap = render_glyph(glyphs[ord(char)])
+        bitmap = render_glyph(
+            glyphs[ord(char)],
+            HANGUL_INK_WIDTH if is_hangul_character(char) else 11,
+        )
         start = index * GLYPH_BYTES
         patched_font[start:start + GLYPH_BYTES] = bitmap
         rows.append(

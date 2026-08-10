@@ -92,9 +92,11 @@ SCE_MAX_LINES = 3
 BATTLE_BOX_ADVANCE = 29
 
 
-def _pages(buf, s, e):
+def _pages(buf, s, e, *, retail=False):
     """레코드를 쪽(F7)·줄(F6)로 갈라 줄별 advance 를 돌려준다."""
     from second_translation_codec import glyph_advance, CONTROL_ARGUMENT_BYTES as CA
+    from halfwidth_hangul import retail_glyph_advance
+    stepper = retail_glyph_advance if retail else glyph_advance
     pages, phase, p = [[0]], 0, s
     while p < e:
         b = buf[p]
@@ -111,7 +113,7 @@ def _pages(buf, s, e):
                 pages.append([0]); phase = 0
             p += 1 + CA.get(b, 0)
             continue
-        step, phase = glyph_advance(idx, phase)
+        step, phase = stepper(idx, phase)
         pages[-1][-1] += step
     return pages
 
@@ -128,7 +130,7 @@ def check_pages(name, ko, jp, recs_ko, recs_jp, tbl, box, out):
         try:
             txt = A.decode(ko, s, e, tbl)
             kp = _pages(ko, s, e)
-            jpg = _pages(jp, sj, ej)
+            jpg = _pages(jp, sj, ej, retail=True)
         except Exception:
             broke += 1
             continue

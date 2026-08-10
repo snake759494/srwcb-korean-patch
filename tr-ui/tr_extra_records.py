@@ -24,6 +24,10 @@ for _sub in ("tools", "third-ui", "ex-ui", "tr-ui", "audit", "menu-align", "seco
 # ------------------------------------------------------------------
 import json, os, re, struct
 
+if str(_P.TOOLS) not in _sys.path:
+    _sys.path.insert(0, str(_P.TOOLS))
+from halfwidth_ui_layout import pad_simple_renderer_record
+
 SP = os.path.dirname(os.path.abspath(__file__))
 ROOT = str(_P.WORK)
 KANJI2KO = {"陸": "육", "空": "공", "水": "수", "宇": "우", "宙": "주",
@@ -161,6 +165,13 @@ def relocate_pointed_records(war, retail, enc_ko, arena_alloc, verbose=True):
         if field + struct.unpack_from("<i", war, field)[0] != pos:
             skipped += 1; continue
         kb = enc_ko(_ko_to_rec(ko)) + b"\xFF"
+        try:
+            kb = pad_simple_renderer_record(retail[pos:end], kb)
+        except ValueError as exc:
+            # Save/continue confirmations intentionally gain a Korean line
+            # break and do not feed a following cursor-relative field.
+            if "line count changed" not in str(exc):
+                raise
         npos = arena_alloc(len(kb))
         war[npos:npos + len(kb)] = kb
         struct.pack_into("<i", war, field, npos - field)

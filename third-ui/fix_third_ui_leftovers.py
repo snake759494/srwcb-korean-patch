@@ -32,6 +32,7 @@ import sys
 
 sys.path.insert(0, str(_P.TOOLS))
 from second_translation_codec import (load_safe_glyph_map, add_extra_glyph_mapping)  # noqa: E402
+from halfwidth_hangul import RUNTIME_CODE_GLYPH_INDICES  # noqa: E402
 
 PINNED = ['×', '…', '↑', '→', '↓', '□', '△', '○', '릭', '응']
 FONT_OFF, GB, GC = 0x2872c, 32, 2816
@@ -147,7 +148,8 @@ def _arena(war: bytes, pre: bytes):
     free = []
     for g in range(0x101, GC):
         a = FONT_OFF + g * GB
-        if g in used or war[a:a + GB] != pre[a:a + GB]:
+        if (g in used or g in RUNTIME_CODE_GLYPH_INDICES
+                or war[a:a + GB] != pre[a:a + GB]):
             continue
         free.append(a)
     # 연속 구간으로 묶는다

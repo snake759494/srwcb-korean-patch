@@ -27,8 +27,10 @@ for _sub in ("tools", "ex-ui"):
 
 DATA = _P.REPO / "ex-ui" / "data"
 
+from halfwidth_hangul import patched_glyph_advance, retail_glyph_advance
 
-def _line_advs(rec):
+
+def _line_advs(rec, *, retail=False):
     """레코드 바이트에서 [F6]/[F7] 로 나뉜 줄마다 렌더러 advance 를 센다.
     advance 는 바이트 길이가 아니라 글리프 인덱스로 정해진다(0x101 미만은 항상 1)."""
     out = [0]; ph = 0; i = 0
@@ -40,8 +42,9 @@ def _line_advs(rec):
         else:
             if x in (0xF6, 0xF7): out.append(0); ph = 0
             i += 1; continue
-        if idx < 0x101: out[-1] += 1
-        else: out[-1] += 1 + ph; ph ^= 1
+        stepper = retail_glyph_advance if retail else patched_glyph_advance
+        step, ph = stepper(idx, ph)
+        out[-1] += step
     return out
 
 
@@ -76,9 +79,11 @@ def build_ex_supplement(glyph_map, src_sce, idx2ch):
         ph = 0; a = 0
         for ch in normalise_for_font(s)[0]:
             i = glyph_map.get(ch)
-            if i is None: a += 1
-            elif i < 0x101: a += 1
-            else: a += 1 + ph; ph ^= 1
+            if i is None:
+                a += 1
+            else:
+                step, ph = patched_glyph_advance(i, ph)
+                a += step
         return a
 
     # ── 선택지/메뉴 레코드 폭 교정 ──────────────────────────────────────────
@@ -164,7 +169,7 @@ def build_ex_supplement(glyph_map, src_sce, idx2ch):
                 _enc, _m = st.finish()          # finish()가 FF까지 붙인다
                 sup[off] = head + bytes(_enc)[:-1] + tail
                 stat["rewrapped"] = stat.get("rewrapped", 0) + 1
-            for _i, (_r, _n) in enumerate(zip(_line_advs(rec), _line_advs(sup[off]))):
+            for _i, (_r, _n) in enumerate(zip(_line_advs(rec, retail=True), _line_advs(sup[off]))):
                 if _n > max(_r, 32): stat["wide"].append((off, f"line{_i}", _n, _r))
         else:
             _w, _l = record_geometry(rec)

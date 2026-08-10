@@ -51,6 +51,24 @@ try:
 except ImportError:  # Direct script execution keeps tools/ on sys.path.
     from second_translation_codec import assemble_translated_record
 
+try:
+    from .halfwidth_hangul import (
+        RUNTIME_CODE_GLYPH_INDICES,
+        patched_glyph_advance,
+        retail_glyph_advance,
+    )
+except ImportError:
+    from halfwidth_hangul import (
+        RUNTIME_CODE_GLYPH_INDICES,
+        patched_glyph_advance,
+        retail_glyph_advance,
+    )
+
+try:
+    from .halfwidth_ui_layout import pad_simple_renderer_record
+except ImportError:
+    from halfwidth_ui_layout import pad_simple_renderer_record
+
 
 PSX_EXE_MAGIC = b"PS-X EXE"
 PSX_HEADER_BYTES = 0x800
@@ -100,7 +118,12 @@ STATIC_FONT_DONOR_SHA256 = "d5993c29f25d93133c3f4e2a3b65a7a727282f6abc5d3ebc8538
 # span.  Two preserved, unreferenced BMESS2 records also contain 0xAFA/0xAFB.
 # Leave all three pixels intact; the latter two are not live runtime text, but
 # retaining them keeps the cross-archive font-tail claim conservative.
-STATIC_FONT_DONOR_EXCLUDED_GLYPHS = (0xAA7, 0xAFA, 0xAFB)
+STATIC_FONT_DONOR_EXCLUDED_GLYPHS = tuple(sorted({
+    0xAA7,
+    0xAFA,
+    0xAFB,
+    *RUNTIME_CODE_GLYPH_INDICES,
+}))
 
 # Common master entry 23 is consumed by the settings VM in exact four-byte
 # groups (``F8 04``).  Widening only the producer makes the following four-byte
@@ -1090,30 +1113,30 @@ def _renderer_span_advance(
     tokens: Iterable[RendererToken],
     *,
     initial_wide_phase: int = 0,
+    retail: bool = False,
 ) -> tuple[int, int]:
     """Model the stateful cursor advance in 0x8006F25C..0x8006F2A8.
 
-    Glyph indices below 0x101 advance one unit.  A high glyph advances one
-    unit in phase zero or two units in phase one, then toggles the phase.  The
-    settings pages enable the F6 mode that resets this phase at every line,
-    so each reviewed fixed span starts in phase zero.
+    Japanese source spans are measured with the retail rule.  Rebuilt Korean
+    spans use the experimental rule where Hangul advances one 8-pixel unit
+    without toggling phase.  Structural glyphs and Japanese remain wide.
     """
 
+    advance_one = retail_glyph_advance if retail else patched_glyph_advance
     phase = initial_wide_phase
     advance = 0
     for token in tokens:
         if token.kind != "glyph":
             continue
-        if _renderer_glyph_index(token.raw) < 0x101:
-            advance += 1
-        else:
-            advance += 1 + phase
-            phase ^= 1
+        step, phase = advance_one(_renderer_glyph_index(token.raw), phase)
+        advance += step
     return advance, phase
 
 
 def _renderer_layout_signature(
     tokens: Iterable[RendererToken],
+    *,
+    retail: bool = False,
 ) -> tuple[int, int]:
     """Return the phase-zero advance and final wide phase of glyph tokens.
 
@@ -1122,7 +1145,11 @@ def _renderer_layout_signature(
     dynamic fields in SECOND's stateful UI VM.
     """
 
-    return _renderer_span_advance(tokens, initial_wide_phase=0)
+    return _renderer_span_advance(
+        tokens,
+        initial_wide_phase=0,
+        retail=retail,
+    )
 
 
 def _next_token_requires_matching_phase(token: RendererToken | None) -> bool:
@@ -1218,6 +1245,98 @@ def _encode_fixed_span_text(
     return encoded + b"\x00" * (capacity - visible_cells)
 
 
+def _stabilize_ui_cursor_anchors(
+    source: bytes,
+    rebuilt: bytes,
+    *,
+    grammar: str,
+    allow_control_argument_changes: bool = False,
+) -> bytes:
+    """Pad rebuilt glyph runs so every following UI control sees the same x.
+
+    Half-width Hangul intentionally does not reproduce the retail wide-glyph
+    phase.  Matching each replacement in isolation is therefore impossible
+    for a one-kanji span such as ``第`` -> ``제``.  What the UI VM actually
+    needs is the same cursor position whenever it reaches its next control.
+    Compare the complete source/output record with their real runtime rules
+    and add only low blank cells immediately before each unchanged control.
+    """
+
+    source_end, source_tokens = _parse_record(source, 0, len(source), grammar)
+    output_end, output_tokens = _parse_record(rebuilt, 0, len(rebuilt), grammar)
+    if source_end != len(source) or output_end != len(rebuilt):
+        raise ValueError("cursor stabilization found trailing UI bytes")
+
+    def groups(tokens: list[RendererToken]) -> list[tuple[list[RendererToken], RendererToken]]:
+        result: list[tuple[list[RendererToken], RendererToken]] = []
+        glyphs: list[RendererToken] = []
+        for token in tokens:
+            if token.kind == "glyph":
+                glyphs.append(token)
+            else:
+                result.append((glyphs, token))
+                glyphs = []
+        if glyphs:
+            raise ValueError("UI record has glyphs after its terminator")
+        return result
+
+    source_groups = groups(source_tokens)
+    output_groups = groups(output_tokens)
+    if len(source_groups) != len(output_groups):
+        raise ValueError("cursor stabilization changed UI control structure")
+
+    source_phase = 0
+    output_phase = 0
+    stabilized = bytearray()
+    for (source_glyphs, source_anchor), (output_glyphs, output_anchor) in zip(
+        source_groups, output_groups
+    ):
+        same_anchor = (
+            source_anchor.kind == output_anchor.kind
+            and source_anchor.raw == output_anchor.raw
+        )
+        if (
+            not same_anchor
+            and allow_control_argument_changes
+            and source_anchor.kind == output_anchor.kind == "control"
+            and source_anchor.raw[:1] == output_anchor.raw[:1]
+        ):
+            same_anchor = True
+        if not same_anchor:
+            raise ValueError("cursor stabilization changed a UI control")
+
+        source_advance = 0
+        for token in source_glyphs:
+            step, source_phase = retail_glyph_advance(
+                _renderer_glyph_index(token.raw), source_phase
+            )
+            source_advance += step
+        output_advance = 0
+        for token in output_glyphs:
+            step, output_phase = patched_glyph_advance(
+                _renderer_glyph_index(token.raw), output_phase
+            )
+            output_advance += step
+            stabilized.extend(token.raw)
+        if output_advance > source_advance:
+            raise ValueError(
+                f"rebuilt UI glyph run advances {output_advance} units before "
+                f"{output_anchor.raw.hex(' ').upper()}, retail has {source_advance}"
+            )
+        stabilized.extend(b"\x00" * (source_advance - output_advance))
+        stabilized.extend(output_anchor.raw)
+
+        if output_anchor.kind == "terminator" or output_anchor.raw[0] in {
+            0xF6,
+            0xFD,
+            0xFE,
+        }:
+            source_phase = 0
+            output_phase = 0
+
+    return bytes(stabilized)
+
+
 def apply_span_replacements(
     raw: bytes,
     replacements: list[dict[str, Any]],
@@ -1239,7 +1358,7 @@ def apply_span_replacements(
     ordered = sorted(replacements, key=lambda item: _int(item["relative_start"], "relative_start"))
     output = bytearray()
     cursor = 0
-    for replacement in ordered:
+    for replacement_index, replacement in enumerate(ordered):
         start = _int(replacement["relative_start"], "relative_start")
         end = _int(
             replacement.get("relative_end", replacement.get("relative_end_exclusive")),
@@ -1256,17 +1375,6 @@ def apply_span_replacements(
         expected_source_hash = replacement.get("source_sha256")
         if expected_source_hash and sha256(source) != str(expected_source_hash).lower():
             raise ValueError(f"replacement source SHA-256 differs at span {start}..{end}")
-        span_tokens = [
-            token
-            for token in record_tokens
-            if token.start < end and token.end > start
-        ]
-        if not span_tokens or any(token.kind != "glyph" for token in span_tokens):
-            raise ValueError("replacement span contains a UI control or compact-mode data")
-        next_token = next(
-            (token for token in record_tokens if token.start >= end),
-            None,
-        )
         output.extend(raw[cursor:start])
         display_text = str(replacement.get("display_text")) if isinstance(
             replacement.get("display_text"), str
@@ -1274,8 +1382,22 @@ def apply_span_replacements(
             str(replacement.get("japanese_text", "")),
             str(replacement["korean_text"]),
         )
-        try:
-            encoded_span = _encode_fixed_span_text(
+
+        def encode_at(span_end: int, *, require_phase: bool | None = None) -> bytes:
+            span_tokens = [
+                token
+                for token in record_tokens
+                if token.start < span_end and token.end > start
+            ]
+            if not span_tokens or any(token.kind != "glyph" for token in span_tokens):
+                raise ValueError(
+                    "replacement span contains a UI control or compact-mode data"
+                )
+            next_token = next(
+                (token for token in record_tokens if token.start >= span_end),
+                None,
+            )
+            return _encode_fixed_span_text(
                 display_text,
                 glyph_map,
                 len(span_tokens),
@@ -1283,29 +1405,75 @@ def apply_span_replacements(
                 byte_capacity=(
                     _int(replacement["output_byte_capacity"], "output_byte_capacity")
                     if preserve_display_bytes and replacement.get("output_byte_capacity") is not None
-                    else (end - start) if preserve_display_bytes else None
+                    else (span_end - start) if preserve_display_bytes else None
                 ),
                 pixel_capacity=(
-                    8 * _renderer_span_advance(span_tokens)[0]
+                    8 * _renderer_span_advance(span_tokens, retail=True)[0]
                     if preserve_display_pixels else None
                 ),
                 renderer_layout=(
-                    _renderer_layout_signature(span_tokens)
+                    _renderer_layout_signature(span_tokens, retail=True)
                     if preserve_renderer_layout else None
                 ),
-                require_matching_phase=_next_token_requires_matching_phase(next_token),
+                require_matching_phase=(
+                    _next_token_requires_matching_phase(next_token)
+                    if require_phase is None
+                    else require_phase
+                ),
             )
+
+        consumed_end = end
+        try:
+            encoded_span = encode_at(end)
         except ValueError as exc:
-            raise ValueError(
-                f"UI span {start}..{end} {replacement.get('japanese_text')!r} "
-                f"-> {display_text!r}: {exc}"
-            ) from exc
+            # A one-glyph Japanese high span has layout (1, phase=1), while a
+            # half-width Hangul replacement is (1, phase=0).  If the source
+            # immediately follows it with the renderer's invisible high blank,
+            # consume that blank into this span and replace the combined
+            # layout with low blank padding.  The visible text keeps its exact
+            # start and total cursor position without reintroducing a wide
+            # Hangul cell.
+            next_replacement_start = (
+                _int(ordered[replacement_index + 1]["relative_start"], "relative_start")
+                if replacement_index + 1 < len(ordered)
+                else None
+            )
+            can_absorb_high_blank = (
+                preserve_renderer_layout
+                and raw.startswith(RENDERER_HIGH_BLANK, end)
+                and end + len(RENDERER_HIGH_BLANK) <= len(raw) - 1
+                and (
+                    next_replacement_start is None
+                    or next_replacement_start >= end + len(RENDERER_HIGH_BLANK)
+                )
+            )
+            if can_absorb_high_blank:
+                consumed_end = end + len(RENDERER_HIGH_BLANK)
+                try:
+                    encoded_span = encode_at(consumed_end)
+                except ValueError:
+                    encoded_span = encode_at(end, require_phase=False)
+                    consumed_end = end
+            elif preserve_renderer_layout:
+                # The whole-record cursor stabilizer below preserves every
+                # control anchor even when a half-width glyph cannot reproduce
+                # the source span's terminal wide phase.
+                encoded_span = encode_at(end, require_phase=False)
+            else:
+                raise ValueError(
+                    f"UI span {start}..{end} {replacement.get('japanese_text')!r} "
+                    f"-> {display_text!r}: {exc}"
+                ) from exc
         output.extend(encoded_span)
-        cursor = end
+        cursor = consumed_end
     output.extend(raw[cursor:])
     rebuilt = bytes(output)
     if control_signature(rebuilt, grammar=grammar) != source_controls:
         raise ValueError("UI replacement changed renderer controls")
+    if preserve_renderer_layout:
+        rebuilt = _stabilize_ui_cursor_anchors(raw, rebuilt, grammar=grammar)
+        if control_signature(rebuilt, grammar=grammar) != source_controls:
+            raise ValueError("UI cursor stabilization changed renderer controls")
     return rebuilt
 
 
@@ -1913,7 +2081,7 @@ def _translation_map(documents: Iterable[dict[str, Any]]) -> dict[tuple[str, int
     return result
 
 
-def _renderer_line_advances(raw: bytes) -> tuple[int, ...]:
+def _renderer_line_advances(raw: bytes, *, retail: bool = False) -> tuple[int, ...]:
     """Return phase-zero advance for each F6-delimited renderer line."""
 
     end, tokens = parse_renderer_record(raw, 0, len(raw))
@@ -1933,7 +2101,10 @@ def _renderer_line_advances(raw: bytes) -> tuple[int, ...]:
             "fixed pointer record contains a non-line renderer control "
             f"{token.raw.hex(' ').upper()}"
         )
-    return tuple(_renderer_span_advance(line)[0] for line in lines)
+    return tuple(
+        _renderer_span_advance(line, retail=retail)[0]
+        for line in lines
+    )
 
 
 def _fixed_pointer_text_fits(
@@ -1945,7 +2116,7 @@ def _fixed_pointer_text_fits(
     require_exact_layout: bool = False,
     column_capacity: int | None = None,
 ) -> tuple[bool, tuple[int, ...], tuple[int, ...]]:
-    source_advances = _renderer_line_advances(source_raw)
+    source_advances = _renderer_line_advances(source_raw, retail=True)
     encoded = renderer_prefix + encode_ui_text(text, glyph_map, terminate=True)
     output_advances = _renderer_line_advances(encoded)
     # Some assets (the pilot/unit *name* list tables) are drawn in a fixed
@@ -1965,7 +2136,8 @@ def _fixed_pointer_text_fits(
         )
         _output_end, output_tokens = parse_renderer_record(encoded, 0, len(encoded))
         fits = _renderer_layout_signature(output_tokens) == _renderer_layout_signature(
-            source_tokens
+            source_tokens,
+            retail=True,
         )
     return fits, source_advances, output_advances
 
@@ -2057,7 +2229,12 @@ def _select_fixed_pointer_overlay(
             candidate,
             glyph_map,
             renderer_prefix=prefix,
-            require_exact_layout=bool(prefix),
+            # Pointer-backed FF records end their draw path here.  Preserve
+            # the retail high-blank prefix (the visible left alignment), but
+            # do not require the final wide-glyph phase to match: half-width
+            # Hangul deliberately does not toggle that phase, and there is no
+            # following inline token which could observe the difference.
+            require_exact_layout=False,
             column_capacity=None if prefix else column_capacity,
         )
         last_output = output_advances
@@ -2385,7 +2562,7 @@ def _rebuild_music_demo_title(
         glyph_map,
         len(source_glyphs),
         preserve_width=True,
-        renderer_layout=_renderer_layout_signature(source_glyphs),
+        renderer_layout=_renderer_layout_signature(source_glyphs, retail=True),
         require_matching_phase=True,
     )
     rebuilt = encoded + b"\xFF"
@@ -2393,7 +2570,8 @@ def _rebuild_music_demo_title(
     if rebuilt_end != len(rebuilt):
         raise AssertionError(f"music/demo output [{index}] has trailing bytes")
     if _renderer_layout_signature(rebuilt_tokens) != _renderer_layout_signature(
-        source_tokens
+        source_tokens,
+        retail=True,
     ):
         raise AssertionError(f"music/demo output [{index}] changed renderer layout")
     return rebuilt
@@ -2470,6 +2648,7 @@ def _prepare_pointer_group(
     translated = 0
     display_width_compacted = 0
     fixed_renderer_width_validated = 0
+    fixed_renderer_extent_restored = 0
     renderer_prefix_preserved = 0
     planned: list[dict[str, Any]] = []
     source_spans: list[tuple[int, int]] = []
@@ -2549,6 +2728,14 @@ def _prepare_pointer_group(
             )
         except ValueError as exc:
             raise ValueError(f"{asset_id}[{index}]: {exc}") from exc
+        if overlay is not None and asset_id in FIXED_POINTER_TEXT_ASSETS:
+            try:
+                rebuilt = pad_simple_renderer_record(source_raw, rebuilt)
+            except ValueError as exc:
+                raise ValueError(
+                    f"{asset_id}[{index}] half-width field extent: {exc}"
+                ) from exc
+            fixed_renderer_extent_restored += 1
         field_value = (
             overlay.get("pointer_field", source_row.get("pointer_field"))
             if overlay is not None
@@ -2588,6 +2775,7 @@ def _prepare_pointer_group(
         "translated_entries": translated,
         "display_width_compacted_entries": display_width_compacted,
         "fixed_renderer_width_validated_entries": fixed_renderer_width_validated,
+        "fixed_renderer_extent_restored_entries": fixed_renderer_extent_restored,
         "renderer_prefix_preserved_entries": renderer_prefix_preserved,
         "guarded_record_entries": len(planned),
         "unique_rebuilt_records": len({row["raw"] for row in planned}),
@@ -3041,7 +3229,7 @@ SHARED_FONT_DONOR_SHA256 = (
 # These are referenced by the shared preview/UI resources in the retail
 # executable.  They remain intact while the other unassigned tail glyphs are
 # used as guarded static storage for the few bytes of menu growth.
-SHARED_FONT_DONOR_EXCLUDED_GLYPHS = (
+SHARED_FONT_DONOR_EXCLUDED_GLYPHS = tuple(sorted({
     0xA75,
     0xA76,
     0xAA7,
@@ -3049,7 +3237,8 @@ SHARED_FONT_DONOR_EXCLUDED_GLYPHS = (
     0xAF1,
     0xAFA,
     0xAFB,
-)
+    *RUNTIME_CODE_GLYPH_INDICES,
+}))
 
 SHARED_COMMON_MASTER_FIELD_BASE = 0x9714
 SHARED_MUSIC_POINTER_TABLE = 0x9F85
@@ -3456,7 +3645,7 @@ def patch_shared_executable_ui(
                         else (end - start) if preserve_display_bytes else None
                     ),
                     renderer_layout=(
-                        _renderer_layout_signature(span_tokens)
+                        _renderer_layout_signature(span_tokens, retail=True)
                         if not preserve_display_bytes else None
                     ),
                     require_matching_phase=_next_token_requires_matching_phase(

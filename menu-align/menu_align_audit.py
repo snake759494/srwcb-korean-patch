@@ -32,6 +32,7 @@ R = str(_P.WORK)
 sys.path.insert(0, f"{R}/tools"); sys.path.insert(0, ".")
 from extract_psx_iso import RawMode2Image, read_tree
 from second_translation_codec import load_safe_glyph_map, add_extra_glyph_mapping
+from halfwidth_hangul import patched_glyph_advance, retail_glyph_advance
 
 mp = json.load(open(f"{R}/research/srwcb_embedded_font_mapping_reviewed.json", encoding="utf-8"))
 I2C = {r["glyph_index"]: (r.get("character") or "") for r in mp["rows"]}
@@ -79,11 +80,12 @@ def parse(b, s):
     return out
 
 
-def sig(v):
+def sig(v, *, retail=False):
     adv = 0; ph = 0; txt = ""
+    stepper = retail_glyph_advance if retail else patched_glyph_advance
     for i in v:
-        if i < 0x101: adv += 1
-        else: adv += 1 + ph; ph ^= 1
+        step, ph = stepper(i, ph)
+        adv += step
         txt += ("␣" if i == 0 else "▉" if i == 0x3FF else (INV.get(i) or I2C.get(i, '?')))
     return adv, ph, txt
 
@@ -140,7 +142,7 @@ def main():
                 issues.append(("STRUCT", f"런 {len(rruns)}->{len(pruns)} 컨트롤 {len(rctl)}->{len(pctl)}"))
             else:
                 for i, (a, b) in enumerate(zip(rruns, pruns)):
-                    (a1, p1, t1), (a2, p2, t2) = sig(a), sig(b)
+                    (a1, p1, t1), (a2, p2, t2) = sig(a, retail=True), sig(b)
                     if a1 != a2:
                         issues.append(("ADV", i, a1, a2, t1, t2))
                 for i, (a, b) in enumerate(zip(rctl, pctl)):

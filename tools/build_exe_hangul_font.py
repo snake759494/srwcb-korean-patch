@@ -4,8 +4,9 @@
 The five game executables contain the same 2,816-glyph bitmap table.  Each
 glyph occupies a 16x16, one-bit cell (32 bytes, two MSB-first bytes per row).
 Indices 0x000-0x100 are kept intact for the game's half-width symbols and
-kana.  KS X 1001 Hangul is installed in indices 0x101-0xA2E, which are all
-rendered through the game's full-width path.
+kana.  KS X 1001 Hangul is installed in indices 0x101-0xA2E.  The experimental
+runtime patch sends those Hangul cells through the same 8-pixel path as kana,
+so every foreground pixel must stay inside the left byte of the 16-pixel cell.
 """
 
 from __future__ import annotations
@@ -21,12 +22,13 @@ from PIL.PngImagePlugin import PngInfo
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_hangul_krom import BdfGlyph, ks_x_1001_hangul, parse_bdf
+from halfwidth_hangul import HANGUL_INK_WIDTH
 
 
 GLYPH_WIDTH = 16
 GLYPH_HEIGHT = 16
 GLYPH_BYTES = 32
-DEFAULT_INK_WIDTH = 11
+DEFAULT_INK_WIDTH = HANGUL_INK_WIDTH
 GLYPH_COUNT = 0xB00
 FONT_BYTES = GLYPH_COUNT * GLYPH_BYTES
 HANGUL_START_INDEX = 0x101
@@ -53,10 +55,9 @@ def sha256(data: bytes) -> str:
 def render_glyph(glyph: BdfGlyph, ink_width: int = DEFAULT_INK_WIDTH) -> bytes:
     """Render Galmuri in a 16x16 cell with a safe right-side margin.
 
-    The Japanese EXE font uses a 16-pixel cell but its normal glyph ink is
-    about 11 pixels wide.  A native 13/14-pixel Galmuri glyph therefore
-    touches the next cell in-game.  Compressing the bitmap horizontally to
-    11 pixels keeps every foreground pixel inside the visual advance width.
+    The half-width renderer reads only the first eight bitmap columns.  A
+    seven-pixel Galmuri body plus the one-pixel left bearing fills that byte
+    without touching or depending on the discarded right byte.
     """
     if not 1 <= ink_width <= GLYPH_WIDTH - 2:
         raise ValueError(f"ink width must be 1..{GLYPH_WIDTH - 2}")

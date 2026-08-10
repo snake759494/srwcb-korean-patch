@@ -24,6 +24,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
+from halfwidth_hangul import (
+    STRUCTURAL_GLYPH_INDICES,
+    patched_glyph_advance,
+    retail_glyph_advance,
+)
+
 
 ROOT = _P.WORK
 FONT_MAP = _P.BUILD / "exe_font_safe_test" / "font" / "hangul_ksx1001_exe_mapping.tsv"
@@ -35,15 +41,11 @@ REVIEWED_MAP = _P.FONT_MAPPING
 # the rightmost characters in every long line.  Keep this as the single
 # layout limit so every rebuilt dialogue record is wrapped consistently.
 MAX_LINE_CELLS = 20
-# The retail renderer (RE'd at 0x8006F564) wraps a dialogue line when a
-# phase-aware cursor countdown reaches the box width of 18 units.  Low-index
-# glyphs (<0x101: ASCII punctuation, spaces) advance one unit; a high glyph
-# advances one unit in phase 0 or two in phase 1, then toggles the phase; F6
-# resets the phase.  Japanese stays phase-aligned so its auto-wraps land on
-# glyph boundaries, but Korean punctuation shifts the phase and the game's
-# auto-wrap then splits a two-byte glyph (dropping its lead byte -> the first
-# glyph of the next box renders as garbage).  We therefore pre-break every line
-# at <= this width so the game never auto-wraps a dialogue record.
+# The retail renderer (RE'd at 0x8006F564) uses a phase-aware cursor.  The
+# experimental runtime classifier makes Hangul use the kana-width path: one
+# 8-pixel unit and no phase change.  Japanese source geometry still uses
+# ``retail_glyph_advance`` when it is a layout target; rebuilt Korean records
+# use ``glyph_advance`` below.
 MAX_LINE_ADVANCE = 18
 # 대사창 상자의 실제 폭(칸). 시나리오 대사는 이 값으로 접는다.
 MAX_SCENE_ADVANCE = 32
@@ -59,10 +61,9 @@ CONTROL_ARGUMENT_BYTES = {0xF6: 0, 0xF7: 0, 0xF8: 1, 0xF9: 1, 0xFA: 0,
 
 
 def glyph_advance(index: int, phase: int) -> tuple[int, int]:
-    """Return (advance_units, next_phase) for one glyph in the dialogue renderer."""
-    if index < 0x101:
-        return 1, phase
-    return 1 + phase, phase ^ 1
+    """Return the patched runtime's (advance_units, next_phase)."""
+
+    return patched_glyph_advance(index, phase)
 GLYPH_COUNT = 0xB00
 EXTRA_GLYPH_START = 0xA2F
 EXTRA_GLYPH_END = GLYPH_COUNT - 1
@@ -73,8 +74,6 @@ EXTRA_GLYPH_END = GLYPH_COUNT - 1
 # them with 릭/읏/응, which made otherwise untranslated structural cells appear
 # as garbage.  Keep the retail bitmaps at these indices and move the displaced
 # Hangul syllables to the dynamic tail together with the other extra glyphs.
-STRUCTURAL_GLYPH_INDICES = frozenset({0x3FF, 0x6FF, 0x700})
-
 # The retail low-font circle/cross mappings are encoded with two bytes but
 # their glyph indices remain below 0x101, so the renderer advances only one
 # cell.  Button selector fields need the original two-cell symbols inside an
@@ -426,11 +425,8 @@ def _pad_into_slack(buf: bytes, need: int) -> bytes:
                 adv = phase = 0
             i += 1 + CONTROL_ARGUMENT_BYTES.get(x, 0)
             continue
-        if idx < 0x101:
-            adv += 1
-        else:
-            adv += 1 + phase
-            phase ^= 1
+        step, phase = glyph_advance(idx, phase)
+        adv += step
     ends.append((len(buf), adv))            # 마지막 줄
     out = bytearray(buf)
     for pos, a in sorted(ends, key=lambda z: -(MAX_SCENE_ADVANCE - z[1])):
@@ -471,11 +467,8 @@ def _tail_line_state(buf: bytes) -> tuple[int, int]:
                 lines = 1
             i += 1 + CONTROL_ARGUMENT_BYTES.get(x, 0)
             continue
-        if idx < 0x101:
-            adv += 1
-        else:
-            adv += 1 + phase
-            phase ^= 1
+        step, phase = glyph_advance(idx, phase)
+        adv += step
     return adv, lines
 
 
@@ -547,7 +540,10 @@ def record_geometry(raw: bytes) -> tuple[int, int]:
                     lines = 1
             p += 1 + CONTROL_ARGUMENT_BYTES.get(b, 0)
             continue
-        step, phase = glyph_advance(index, phase)
+        # ``raw`` is a pristine Japanese record.  Its box geometry is a visual
+        # target, so measure it with the retail mixed-width rule even though
+        # the rebuilt Korean output uses the patched half-width rule.
+        step, phase = retail_glyph_advance(index, phase)
         adv += step
     max_adv = max(max_adv, adv)
     return max_adv, max_lines

@@ -36,6 +36,7 @@ import audit_all as A
 from second_translation_codec import (load_safe_glyph_map, add_extra_glyph_mapping,
                                       normalise_for_font)
 from patch_second_exe_ui import parse_second_ui_vm_record as PV
+from halfwidth_hangul import RUNTIME_CODE_GLYPH_INDICES
 
 GB, GC = 32, 2816
 CB = A.CB
@@ -110,7 +111,7 @@ class Fixer:
         extras_end = 0xA2F + len(self.cfg["extras"])
         free = []
         for g in range(extras_end, GC):
-            if g in live:
+            if g in live or g in RUNTIME_CODE_GLYPH_INDICES:
                 continue
             a = foff + g * GB
             if bytes(self.war[a:a + GB]) == dyn[g * GB:(g + 1) * GB]:

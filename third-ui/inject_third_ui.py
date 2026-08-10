@@ -36,11 +36,20 @@ sys.path.insert(0, str(_P.TOOLS))
 from second_translation_codec import (load_safe_glyph_map, required_extra_characters,
                                       add_extra_glyph_mapping, normalise_for_font)
 from build_second_expanded_patch import FONT_EXE_LAYOUT
+from halfwidth_hangul import (RUNTIME_CODE_GLYPH_INDICES,
+                              patched_glyph_advance, retail_glyph_advance,
+                              validate_dynamic_hangul_mapping)
+from halfwidth_ui_layout import (
+    choose_fixed_text,
+    pad_controlled_renderer_record,
+    pad_simple_renderer_record,
+)
+from second_ui_phase_compaction import FIXED_UI_PHASE_COMPACTION_BY_ASSET_SOURCE
 
 ROOT = str(_P.WORK)
 SP = str(_P.BUILD)
 EXTRA_GLYPH_START, GLYPH_COUNT, GLYPH_BYTES = 0xA2F, 0xB00, 32
-STRUCT_GLYPHS = {0x3FF, 0x6FF, 0x700}
+STRUCT_GLYPHS = {0x3FF, 0x6FF, 0x700, *RUNTIME_CODE_GLYPH_INDICES}
 CTRL_ARGS = {0xF6:0,0xF7:0,0xF8:1,0xF9:1,0xFA:0,0xFB:2,0xFC:2,0xFD:2,0xFE:1}
 LABEL_DELTA = 0x2dc
 
@@ -87,8 +96,10 @@ def enc_jp(t):
     return bytes(o)
 
 # ---------------- translations ----------------
+_table_overlay=json.load(open(f"{ROOT}/translation_v2/second_ui_tables_overlay.json",encoding="utf-8"))
+WIDTH_COMPACTION_BY_ASSET_SOURCE=_table_overlay.get("width_compaction",{})
 jp2ko={}
-for tb in json.load(open(f"{ROOT}/translation_v2/second_ui_tables_overlay.json",encoding="utf-8"))["tables"]:
+for tb in _table_overlay["tables"]:
     for e in tb["entries"]:
         if e.get("source_text") and e.get("korean_text") and str(e["korean_text"]).strip(): jp2ko[e["source_text"]]=e["korean_text"]
 for tb in json.load(open(f"{ROOT}/translation_v2/second_ui_names_overlay.json",encoding="utf-8"))["tables"]:
@@ -162,6 +173,7 @@ ko_all=[_STRIP.sub("", x) for x in ko_all]
 base=load_safe_glyph_map()
 EXTRAS=required_extra_characters([normalise_for_font(x)[0] for x in ko_all], base)
 gm=add_extra_glyph_mapping(base,EXTRAS)
+validate_dynamic_hangul_mapping(gm)
 print("FINAL extras:",EXTRAS)
 import re as _re
 _CTRL_MARK=_re.compile(r"\[F([6-9A-Ea-e])\]")
@@ -218,11 +230,11 @@ def arena_alloc(n):
 from third_align_overrides import ALIGN_OVERRIDES, SPECIAL_SPAN_RECORDS, SPIRIT_DESC_SHORT
 HIGH_BLANK=b"\xEE\xFF"
 _JPDEC=dict(idx2ch); _JPDEC[0x000]=" "
-def _sig(idxs):
+def _sig(idxs, *, retail=False):
     ph=0;adv=0
+    advance_one = retail_glyph_advance if retail else patched_glyph_advance
     for i in idxs:
-        if i<0x101: adv+=1
-        else: adv+=1+ph; ph^=1
+        step,ph=advance_one(i,ph); adv+=step
     return adv,ph
 def _idxs_of(b):
     out=[];p=0
@@ -250,7 +262,7 @@ def fit_span(src_bytes, ko_text, tag, strict, pad=True):
     relaxed (line/record end, F8 fields...): best-effort pad, keep full text on miss.
     pad=False (cursor-relative screens where 0x00 filler shifts later anchors):
     just pick the first candidate whose advance fits, no padding bytes."""
-    target=_sig(_idxs_of(src_bytes))
+    target=_sig(_idxs_of(src_bytes), retail=True)
     jp="".join(_JPDEC.get(i,"·") for i in _idxs_of(src_bytes))
     if not pad:
         for cand in (ko_text,)+tuple(ALIGN_OVERRIDES.get(jp,())):
@@ -349,11 +361,13 @@ TABLES=[("terrain_names",0xbb0c,144,0xbf68),("spirit_commands",0xbf68,94,0xc634)
 ("scenario_titles",0x11668,192,0x11be0),("pilot_short_names",0x10dbf8,400,0x10eb2c),
 ("pilot_full_names",0x10eb2c,400,0x110208),("unit_names",0x110208,448,0x111b60)]
 SPIRIT_DESC_MAX=34   # wider descriptions wrap around the screen (x overflow)
+_selected_fixed_text={}
 for name,ptr,cnt,bound in TABLES:
     pool_lo=ptr+4+4*cnt; recs={}; pf=[]
     for k in range(cnt):
         f=ptr+4+4*k; t=f+s32(f); pf.append((f,t))
-        if not (pool_lo<=t and rec_end(war,t)<=bound) or t in recs: continue
+        if not (pool_lo<=t and rec_end(war,t)<=bound): continue
+        source_raw=bytes(war[t:rec_end(war,t)])
         jp=decode(war,t); ko=jp2ko.get(jp)
         if name=="spirit_commands" and ko:
             adv,_ph=_sig(_idxs_of(enc_ko(ko)))
@@ -362,7 +376,28 @@ for name,ptr,cnt,bound in TABLES:
                 assert ko is not None, f"spirit desc too wide, no short form: {jp[:24]}"
                 adv,_ph=_sig(_idxs_of(enc_ko(ko)))
                 assert adv<=SPIRIT_DESC_MAX, f"short spirit desc still {adv}: {ko}"
-        recs[t]=(enc_ko(ko)+b"\xFF") if ko else bytes(war[t:rec_end(war,t)])
+        if ko:
+            fallback=(
+                _selected_fixed_text.get(("pilot_short_names",k))
+                if name=="pilot_full_names" else None
+            )
+            ko=choose_fixed_text(
+                asset_id=name,
+                source_text=jp,
+                default_text=ko,
+                source_raw=source_raw,
+                encode=enc_ko,
+                reviewed_width_aliases=WIDTH_COMPACTION_BY_ASSET_SOURCE,
+                phase_aliases=FIXED_UI_PHASE_COMPACTION_BY_ASSET_SOURCE,
+                extra_candidates=(fallback,),
+            )
+            _selected_fixed_text[(name,k)]=ko
+        if t in recs:
+            continue
+        recs[t]=(
+            pad_simple_renderer_record(source_raw,enc_ko(ko)+b"\xFF")
+            if ko else source_raw
+        )
     repack(name,recs,pool_lo,min(max(rec_end(war,t) for t in recs),bound),pf)
 
 # ---------------- ui_master: RELOCATE-ALL (walk region stays byte-identical to retail) ----------------
@@ -515,6 +550,7 @@ def rebuild_packed(start):
             n=1+CTRL_ARGS.get(x,0); out+=war[p:p+n]; p+=n
     out.append(0xFF); return bytes(out)
 mp_fit=mp_reloc=mp_skip=0
+mp_controlled_fit=mp_controlled_unpadded=0
 for t in sorted(_mp_recs, key=lambda t:-(rec_end(war,t)-t)):
     if t in MAP_LABEL_OFFS or t in PACKED_SKIP: mp_skip+=1; continue
     orig=rec_end(war,t)-t
@@ -522,7 +558,24 @@ for t in sorted(_mp_recs, key=lambda t:-(rec_end(war,t)-t)):
         kb=rebuild_packed(t)
         assert len(kb)==orig, f"packed record {hex(t)} byte length changed!"
     else:
-        kb,_=rebuild_record(t,f"mp@{hex(t)}")
+        # These records are selected dynamically through F8.  Their terminal
+        # phase does not matter, but their cursor extent does: later relative
+        # fields otherwise move left by the number of half-width Hangul cells.
+        kb,_=rebuild_record(t,f"mp@{hex(t)}",fit=False)
+        source_record=bytes(war[t:t+orig])
+        try:
+            kb=pad_simple_renderer_record(source_record,kb)
+        except ValueError:
+            # Large UI-VM records may contain FD/FC/F8 controls.  Preserve
+            # per-field extents when the compensated form still fits its
+            # guarded retail slot; otherwise keep the translated form.  Such
+            # full-screen programs are aligned by their own coordinates and
+            # must not consume an unbounded contiguous font-donor run.
+            controlled=pad_controlled_renderer_record(source_record,kb)
+            if len(controlled)<=orig:
+                kb=controlled; mp_controlled_fit+=1
+            else:
+                mp_controlled_unpadded+=1
     if len(kb)<=orig:
         war[t:t+len(kb)]=kb          # shorten in place; leave dead bytes after new FF
         mp_fit+=1
@@ -531,13 +584,17 @@ for t in sorted(_mp_recs, key=lambda t:-(rec_end(war,t)-t)):
         for f in _mp_tgt2ptr.get(t,()): struct.pack_into("<i",war,f,npos-f)
         mp_reloc+=1
 print(f"  system message pool: shorten-in-place={mp_fit} relocated={mp_reloc} skip(map-label)={mp_skip}")
+print(f"    controlled records: extent-fit={mp_controlled_fit} coordinate-owned={mp_controlled_unpadded}")
 
 # ---------------- music/demo pool (nested) ----------------
 mf=0x94D8+4+36*4; nested=mf+s32(mf); recs={}; pf=[]
 for i in range(172):
     f=nested+i*4; t=f+s32(f); pf.append((f,t))
     if t in recs: continue
-    b,_=rebuild_record(t); recs[t]=b
+    # Music/demo titles are independent FF records, but the list UI still
+    # consumes their resulting cursor extent for column/window placement.
+    b,_=rebuild_record(t,fit=False); recs[t]=b
+    recs[t]=pad_simple_renderer_record(bytes(war[t:rec_end(war,t)]),recs[t])
 repack("music_demo",recs,min(recs),max(rec_end(war,t) for t in recs),pf)
 
 # ---------------- map labels: byte-exact in place ----------------

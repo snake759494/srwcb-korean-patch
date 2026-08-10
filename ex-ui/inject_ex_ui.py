@@ -32,6 +32,12 @@ sys.path.insert(0, str(_P.TOOLS)); sys.path.insert(0, SP)
 from second_translation_codec import (load_safe_glyph_map, add_extra_glyph_mapping,
                                       required_extra_characters, normalise_for_font)
 from build_exe_hangul_font import EXE_LAYOUT as FONT_EXE_LAYOUT
+from halfwidth_hangul import (RUNTIME_CODE_GLYPH_INDICES,
+                              STRUCTURAL_GLYPH_INDICES,
+                              patched_glyph_advance, retail_glyph_advance,
+                              validate_dynamic_hangul_mapping)
+from halfwidth_ui_layout import choose_fixed_text, pad_simple_renderer_record
+from second_ui_phase_compaction import FIXED_UI_PHASE_COMPACTION_BY_ASSET_SOURCE
 
 SRC = f"{ROOT}/test_build/ex_full/runtime/EX/EX.WAR"
 war = bytearray(open(SRC, "rb").read()); N = len(war)
@@ -45,7 +51,7 @@ assert war[0x974b:0x974b + 76] == RETAIL[0x974b:0x974b + 76], (
 mpj = json.load(open(f"{ROOT}/research/srwcb_embedded_font_mapping_reviewed.json", encoding="utf-8"))
 idx2ch = {r["glyph_index"]: (r.get("character") or "") for r in mpj["rows"]}
 GLYPH_COUNT, GLYPH_BYTES = 2816, 32
-STRUCT_GLYPHS = {0x3FF}          # EE FF = 투명 전각 스페이서 (우측정렬 패딩)
+STRUCT_GLYPHS = {*STRUCTURAL_GLYPH_INDICES, *RUNTIME_CODE_GLYPH_INDICES}
 
 def s32(o): return struct.unpack_from("<i", war, o)[0]
 # 제3차 주입기와 동일한 토큰 문법(검증됨). F7은 인자 0개이고, 0xFF는 토큰 경계에서
@@ -80,8 +86,10 @@ def enc_jp(t):
     return bytes(o)
 
 # ---------------- 번역 사전 ----------------
+_table_overlay = json.load(open(f"{_P.TRANSLATION}/second_ui_tables_overlay.json", encoding="utf-8"))
+WIDTH_COMPACTION_BY_ASSET_SOURCE = _table_overlay.get("width_compaction", {})
 jp2ko = {}
-for tb in json.load(open(f"{_P.TRANSLATION}/second_ui_tables_overlay.json", encoding="utf-8"))["tables"]:
+for tb in _table_overlay["tables"]:
     for e in tb["entries"]:
         if e.get("source_text") and e.get("korean_text") and str(e["korean_text"]).strip():
             jp2ko[e["source_text"]] = e["korean_text"]
@@ -150,6 +158,7 @@ if os.path.exists(_fe):
     assert EXTRAS == _want, (f"EXTRAS 불일치!\n  폰트: {_want}\n  주입: {EXTRAS}\n"
                              "  → build_ex_full.py 를 먼저 다시 실행하거나 신규 문자를 없애세요")
 gm = add_extra_glyph_mapping(base, EXTRAS)
+validate_dynamic_hangul_mapping(gm)
 print(f"EXTRAS {len(EXTRAS)} (고정 {len(PINNED)} + 신규 {len(EXTRAS)-len(PINNED)})")
 
 _CTRL = re.compile(r"\[F([6-9A-Ea-e])\]")
@@ -201,11 +210,11 @@ def arena_alloc(n):
 # ---------------- 스팬 폭 보존 ----------------
 HIGH_BLANK = b"\xEE\xFF"
 _JPDEC = dict(idx2ch); _JPDEC[0x000] = " "
-def _sig(idxs):
+def _sig(idxs, *, retail=False):
     ph = 0; adv = 0
+    advance_one = retail_glyph_advance if retail else patched_glyph_advance
     for i in idxs:
-        if i < 0x101: adv += 1
-        else: adv += 1 + ph; ph ^= 1
+        step, ph = advance_one(i, ph); adv += step
     return adv, ph
 def _idxs_of(b):
     out = []; p = 0
@@ -231,7 +240,7 @@ def _cands(jp, ko):
     for c in _TH_OVR.get(jp, []) or []: out.append(c)
     return out
 def fit_span(src_bytes, ko_text, tag, strict):
-    target = _sig(_idxs_of(src_bytes))
+    target = _sig(_idxs_of(src_bytes), retail=True)
     jp = "".join(_JPDEC.get(i, '·') for i in _idxs_of(src_bytes))
     def attempt(b):
         adv, ph = _sig(_idxs_of(b))
@@ -299,11 +308,13 @@ except Exception:
     pass
 _sp = f"{_P.BUILD}/ex/ex_spirit_desc_short.json"
 if os.path.exists(_sp): _SDS.update(json.load(open(_sp, encoding="utf-8")))
+_selected_fixed_text = {}
 for name, ptr, cnt, bound in TABLES:
     pool_lo = ptr + 4 + 4 * cnt; recs = {}; pf = []
     for k in range(cnt):
         f = ptr + 4 + 4 * k; t = f + s32(f); pf.append((f, t))
-        if not (pool_lo <= t and rec_end(war, t) <= bound) or t in recs: continue
+        if not (pool_lo <= t and rec_end(war, t) <= bound): continue
+        source_raw = bytes(war[t:rec_end(war, t)])
         jp = decode(war, t); ko = jp2ko.get(jp)
         if name == "spirit_commands" and ko:
             adv, _ = _sig(_idxs_of(enc_ko(ko)))
@@ -311,7 +322,28 @@ for name, ptr, cnt, bound in TABLES:
                 ko = _SDS.get(jp, ko)
                 adv, _ = _sig(_idxs_of(enc_ko(ko)))
                 if adv > SPIRIT_DESC_MAX: align_fail.append(("spirit_desc", jp, ko, (adv, 0), (SPIRIT_DESC_MAX, 0)))
-        recs[t] = (enc_ko(ko) + b"\xFF") if ko else bytes(war[t:rec_end(war, t)])
+        if ko:
+            fallback = (
+                _selected_fixed_text.get(("pilot_short_names", k))
+                if name == "pilot_full_names" else None
+            )
+            ko = choose_fixed_text(
+                asset_id=name,
+                source_text=jp,
+                default_text=ko,
+                source_raw=source_raw,
+                encode=enc_ko,
+                reviewed_width_aliases=WIDTH_COMPACTION_BY_ASSET_SOURCE,
+                phase_aliases=FIXED_UI_PHASE_COMPACTION_BY_ASSET_SOURCE,
+                extra_candidates=(fallback,),
+            )
+            _selected_fixed_text[(name, k)] = ko
+        if t in recs:
+            continue
+        recs[t] = (
+            pad_simple_renderer_record(source_raw, enc_ko(ko) + b"\xFF")
+            if ko else source_raw
+        )
     repack(name, recs, pool_lo, min(max(rec_end(war, t) for t in recs), bound), pf)
 
 # ---------------- ui_master (0x188C4, 107) extent-preserving ----------------
@@ -495,6 +527,27 @@ print(f"  map_labels 제자리={_lok} 넘침={_llong} 스킵={_lskip}")
 # ---------------- 주입기가 놓쳤던 잔여 레코드 (필드상대 포인터 재조준) ----------------
 # 캐릭터 사전·작품명·데모/BGM 제목, 저장/유닛강화 확인, 모노/스테레오 등.
 _XR.relocate_pointed_records(war, RETAIL, enc_ko, arena_alloc)
+
+# Offset-indexed settings values are selected by fixed byte groups.  Keep the
+# retail group sizes, but translate both the sound and battle-BGM choices.
+# The zero bytes inside the first BGM group are renderer spaces, not record
+# terminators, because F8 consumes the guarded fixed-size group.
+_SETTING_VALUES = [
+    (0x9C56, "モノラル", "모노"),
+    (0x9C56, "ステレオ", "입체"),
+    (0x9C5F, "切り替え", "전환"),
+    (0x9C5F, "固定", "고정"),
+]
+for _off, _jp, _ko in _SETTING_VALUES:
+    _src = enc_jp(_jp); _rep = enc_ko(_ko)
+    assert _src is not None and len(_rep) <= len(_src)
+    _end = rec_end(war, _off)
+    _at = war.find(_src, _off, _end)
+    if _at >= 0:
+        war[_at:_at + len(_src)] = _rep + b"\x00" * (len(_src) - len(_rep))
+    else:
+        assert war.find(_rep, _off, _end) >= 0, f"settings value {_jp!r} missing"
+print("  설정 선택값 한글: 모노/입체, 전환/고정")
 
 if align_fail:
     print("\n!! 정렬 실패 (더 짧은 표현 필요):")

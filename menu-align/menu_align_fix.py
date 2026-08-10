@@ -38,9 +38,18 @@ from pathlib import Path
 SP = str(_P.BUILD)   # 중간 산출물(캐시·교정본)을 두는 곳
 ROOT = str(_P.WORK)
 sys.path.insert(0, str(_P.TOOLS)); sys.path.insert(0, SP)
-from patch_second_exe_ui import parse_second_ui_vm_record as PV
+from patch_second_exe_ui import (
+    SECOND_UI_VM_GRAMMAR,
+    _stabilize_ui_cursor_anchors,
+    parse_second_ui_vm_record as PV,
+)
 from second_translation_codec import (load_safe_glyph_map, add_extra_glyph_mapping,
                                       normalise_for_font)
+from halfwidth_hangul import (
+    RUNTIME_CODE_GLYPH_INDICES,
+    patched_glyph_advance,
+    retail_glyph_advance,
+)
 import second_ui_transplant as ST
 
 IMG = (f"{ROOT}/test_build/third_full/"
@@ -118,11 +127,13 @@ def pv_elems(buf, s):
     return out, end
 
 
-def adv_of(g):
+def adv_of(g, *, retail=False):
+    """Renderer advance for a retail source or rebuilt Korean run."""
     a = 0; ph = 0
+    stepper = retail_glyph_advance if retail else patched_glyph_advance
     for i in g:
-        if i < 0x101: a += 1
-        else: a += 1 + ph; ph ^= 1
+        step, ph = stepper(i, ph)
+        a += step
     return a
 
 
@@ -206,7 +217,7 @@ class Fixer:
         extras_end = 0xA2F + len(cfg["extras"])
         free = []
         for g in range(extras_end, GC):
-            if g in live:
+            if g in live or g in RUNTIME_CODE_GLYPH_INDICES:
                 continue
             if self._font_slot(self.cur, g) == dyn[g * GB:(g + 1) * GB]:
                 free.append(g)
@@ -322,7 +333,7 @@ class Fixer:
                 ci += 1
                 continue
             rg = v; cg = [self.remap.get(i, i) for i in cruns[ri]]; ri += 1
-            target = adv_of(rg)
+            target = adv_of(rg, retail=True)
             jt = self.jp_text(rg)
             lead = 0
             while lead < len(rg) and rg[lead] == 0:
@@ -347,9 +358,6 @@ class Fixer:
             if adv_of(cg) == target:
                 out += enc_glyphs(cg)
                 continue
-            if 0x3FF in rg:
-                # 레트일 쪽 스페이서는 구조적 칸 구분자 — 자동 교정 금지
-                self.fails.append((k, "스페이서", jt)); return None, None
             kt = self.ko_text(cg)
             cands = []
             if kt:
@@ -372,7 +380,17 @@ class Fixer:
                 self.fails.append((k, "폭", f"'{jt}' -> {cands[:2]} target={target} best={best}"))
                 return None, None
         out.append(0xFF)
-        return bytes(out), "런교정"
+        try:
+            stabilized = _stabilize_ui_cursor_anchors(
+                ret_rec,
+                bytes(out),
+                grammar=SECOND_UI_VM_GRAMMAR,
+                allow_control_argument_changes=True,
+            )
+        except ValueError as exc:
+            self.fails.append((k, "앵커", str(exc)))
+            return None, None
+        return stabilized, "런교정"
 
     # 순차 윈도우-워크 앵커: 포인터 없는 '외래' 레코드가 이들 바로 뒤에 이어 붙어
     # 게임이 순차로 훑는다. 그래서 크기를 늘리면(도너 이동 포함) 뒤 외래 레코드가
@@ -454,9 +472,9 @@ class Fixer:
             f = MH + 4 + 4 * k
             rt = f + struct.unpack_from("<i", self.ret, f)[0]
             pt = f + struct.unpack_from("<i", self.cur, f)[0]
-            rel, _ = pv_elems(self.ret, rt)
+            rel, rend = pv_elems(self.ret, rt)
             try:
-                cel, _ = pv_elems(self.cur, pt)
+                cel, cend = pv_elems(self.cur, pt)
             except Exception as ex:
                 bad.append(f"[{k}] PV 실패 {ex}"); continue
             rr = [v for t, v in rel if t == 'r']; pr = [v for t, v in cel if t == 'r']
@@ -466,9 +484,19 @@ class Fixer:
                 cel.pop(); pr.pop()      # 끝 정크(무해)는 비교에서 제외
             if len(rr) != len(pr) or len(rc) != len(pc):
                 bad.append(f"[{k}] 구조 {len(rr)}/{len(pr)} {len(rc)}/{len(pc)}"); continue
-            for i, (a, b) in enumerate(zip(rr, pr)):
-                if adv_of(a) != adv_of(b):
-                    adv_bad += 1; bad.append(f"[{k}] run{i} adv {adv_of(a)}->{adv_of(b)}")
+            try:
+                stabilized = _stabilize_ui_cursor_anchors(
+                    bytes(self.ret[rt:rend]),
+                    bytes(self.cur[pt:cend]),
+                    grammar=SECOND_UI_VM_GRAMMAR,
+                    allow_control_argument_changes=True,
+                )
+                if stabilized != bytes(self.cur[pt:cend]):
+                    adv_bad += 1
+                    bad.append(f"[{k}] 제어 앵커 advance 불일치")
+            except ValueError as exc:
+                adv_bad += 1
+                bad.append(f"[{k}] 제어 앵커 검증 실패 {exc}")
             for i, (a, b) in enumerate(zip(rc, pc)):
                 if a != b and not (a in allowed_old and b in allowed_new):
                     ctl_bad += 1; bad.append(f"[{k}] ctl{i} {a.hex(' ')}→{b.hex(' ')}")

@@ -36,6 +36,7 @@ for _sub in ("tools", "third-ui", "ex-ui", "tr-ui", "audit", "menu-align", "seco
 # ------------------------------------------------------------------
 import json, math, pickle, struct, sys, os
 from pathlib import Path
+from halfwidth_hangul import patched_glyph_advance, retail_glyph_advance
 
 SP = str(_P.BUILD)   # 중간 산출물(캐시·교정본)을 두는 곳
 ROOT = str(_P.WORK)
@@ -63,12 +64,32 @@ def pv_elements(buf, s):
     return out, end
 
 
-def adv_of(glyphs):
+def adv_of(glyphs, *, retail=False):
     adv = 0; ph = 0
+    stepper = retail_glyph_advance if retail else patched_glyph_advance
     for i in glyphs:
-        if i < 0x101: adv += 1
-        else: adv += 1 + ph; ph ^= 1
+        step, ph = stepper(i, ph)
+        adv += step
     return adv
+
+
+def anchor_profile(elements, *, retail=False):
+    """Per-control glyph advance using the phase flowing through the record."""
+    stepper = retail_glyph_advance if retail else patched_glyph_advance
+    phase = 0
+    advance = 0
+    profile = []
+    for kind, value in elements:
+        if kind == 'r':
+            for glyph in value:
+                step, phase = stepper(glyph, phase)
+                advance += step
+            continue
+        profile.append(advance)
+        advance = 0
+        if value and value[0] in {0xF6, 0xFD, 0xFE, 0xFF}:
+            phase = 0
+    return tuple(profile)
 
 
 def enc_glyphs(glyphs):
@@ -111,8 +132,10 @@ def build():
         rr = [v for t, v in re_ if t == 'r']; pr = [v for t, v in pe_ if t == 'r']
         rc = [v for t, v in re_ if t == 'c']; pc = [v for t, v in pe_ if t == 'c']
         assert len(rr) == len(pr) and len(rc) == len(pc), f"제2차 [{k}] 구조 불일치"
+        assert anchor_profile(re_, retail=True) == anchor_profile(pe_), (
+            f"제2차 [{k}] 제어 앵커 advance 불일치"
+        )
         for a, b2 in zip(rr, pr):
-            assert adv_of(a) == adv_of(b2), f"제2차 [{k}] 런 advance 불일치"
             jt = jp_text(a).strip("␣").strip()
             jt = jt.strip("\x00")
             # 패딩(0x000) 제거한 순수 텍스트 키
