@@ -10165,6 +10165,13 @@
               "japanese_text": "いいえ",
               "korean_text": "아뇨"
             }
+          ],
+          "control_patches": [
+            {
+              "source_hex": "FC 10 FC F8 82",
+              "replacement_hex": "FC 0B FC F8 82",
+              "expected_count": 1
+            }
           ]
         },
         {

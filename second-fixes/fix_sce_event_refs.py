@@ -73,6 +73,15 @@ def scan_pool_refs(buf, scn):
     refs = []
     for off, operand, op in iter_pointer_sites(buf, scn.pool_start,
                                                scn.record_data_end):
+        # A trailing B1/B3/B4 immediately before FF is ordinary renderer
+        # data at the end of a script record, not a complete pointer.  Without
+        # this boundary guard its first operand byte can be the next record's
+        # first byte; retargeting then overwrites the real FF terminator and
+        # merges two event records (seen in SECOND scenario 4).
+        host = next((record for record in scn.records
+                     if record.start <= off < record.end), None)
+        if host is None or operand + 1 >= host.end - 1:
+            continue
         disp = struct.unpack_from("<h", buf, operand)[0]
         tgt = operand + disp
         if tgt in starts:
@@ -498,14 +507,18 @@ def harden_against_ff_operands(src, replacements, rebuild, *, rounds=400, verbos
         grow = []
         pre = parse_scenarios(out)      # 재조준 전 (경계가 레트일과 같은 상태)
         for a, b, c in zip(sj, sk, pre):
-            if len(a.records) == len(b.records) or a.index in unsafe:
+            # 레코드 수가 같아도 새 변위에 FF가 들어가면 다음 스캔에서
+            # 스크립트가 중간에 끊길 수 있다. 이 경우는 경계 수가 아니라
+            # `_bad_operand_targets`를 기준으로 앞 레코드를 한 칸 늘린다.
+            bad_targets = _bad_operand_targets(fixed, c)
+            if (len(a.records) == len(b.records) and not bad_targets) or a.index in unsafe:
                 continue
             # 어긋남을 만든 포인터의 **타깃**을 찾아, 그 바로 앞 레코드를 늘린다.
             # 레코드 0 처럼 포인터가 스무 개씩 든 스크립트 레코드를 통째로 늘리면
             # 그 안의 변위가 한꺼번에 움직여 서로를 깨뜨려 영영 안 맞는다.
             starts = [r.start for r in c.records]
             picked = False
-            for tgt in sorted(_bad_operand_targets(fixed, c)):
+            for tgt in sorted(bad_targets):
                 if tgt in starts:
                     i = starts.index(tgt)
                     if i:

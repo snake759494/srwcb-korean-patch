@@ -186,10 +186,10 @@
    "offset": 59982,
    "record_bytes": 43,
    "raw_sha256": "d7ededaf2aa0f795cad4a82d7cc32000c26a93c192f0656880f75633ea119803",
-   "text_start_rel": 33,
-   "prefix_hex": "BF 00 07 C1 05 D0 00 C1 02 D0 00 E9 03 FE FF 04 00 1B 00 EC 93 EC 91 EC 92 77 ED D3 ED A9 E4 F5 26",
-   "japanese_text": "は敵の全滅。",
-   "korean_text": "후에는 적 전멸。"
+   "text_start_rel": 19,
+   "prefix_hex": "BF 00 07 C1 05 D0 00 C1 02 D0 00 E9 03 FE FF 04 00 1B 00",
+   "japanese_text": "敵要塞へ侵入。後は敵の全滅。",
+   "korean_text": "적 요새에 침입하고, 그 후에는 적 전멸."
   },
   {
    "offset": 60026,

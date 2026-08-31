@@ -309,6 +309,12 @@ TABLES = [("terrain_names", 0xbcb4, 144, 0xc184), ("spirit_commands", 0xc184, 94
           ("pilot_skills", 0xf258, 52, 0xf510), ("unit_abilities", 0xf510, 22, 0xf61c),
           ("scenario_titles", 0xf61c, 192, 0xfc04), ("pilot_short_names", 0x10778c, 400, 0x1081bc),
           ("pilot_full_names", 0x1081bc, 400, 0x108f64), ("unit_names", 0x108f64, 448, 0x10a000)]
+# EX의 원문 글리프 0x562는 검토용 폰트 원장에서 미상으로 남아 있어
+# 정신기 목록의 魂이 F0 62 FF로 보존된다. 한글 폰트에서 이 슬롯은
+# 샐로 채워지므로, 해당 원문 레코드만 혼(0x4D5)으로 명시 교정한다.
+SPIRIT_RECORD_OVERRIDES = {
+    bytes.fromhex("F0 62 FF"): "혼",
+}
 SPIRIT_DESC_MAX = 34
 _SDS = {}
 try:   # 제3차에서 폭 검증된 정신기 설명 축약형 (정신기는 게임 간 동일)
@@ -324,6 +330,8 @@ for name, ptr, cnt, bound in TABLES:
         f = ptr + 4 + 4 * k; t = f + s32(f); pf.append((f, t))
         if not (pool_lo <= t and rec_end(war, t) <= bound) or t in recs: continue
         jp = decode(war, t); ko = jp2ko.get(jp)
+        if name == "spirit_commands":
+            ko = SPIRIT_RECORD_OVERRIDES.get(bytes(war[t:rec_end(war, t)]), ko)
         # 무기명은 레트일이 붙여 쓴다 — 값이 어느 사전에서 왔든 인코딩 직전에 건다
         # (2026-08-19 제보 #15a).
         if name == "weapon_names" and ko: ko = ko.replace(" ", "").replace("　", "")
@@ -392,9 +400,9 @@ _LINE_OVERRIDES = {
 # 짝수로 만들면 스페이서가 1 로 줄어 모자란 폭이 뒤 칸 패딩으로 흘러 레벨 칸이 넘친다.
     "マサキの章難度やさしい":      "마사키 " + SPACER + " 레벨 쉬움",
     "リュ-ネの章難度ふつう":       "류네편  " + SPACER + "레벨 보통",
-    "シュウの章難度むずかしい":    "슈우편 " + SPACER + " 레벨 어려움",
+    "シュウの章難度むずかしい":    "슈우편" + SPACER + "레벨 어려움",
     "リュ-ネの章難度ふ":           "류네편  " + SPACER + "레벨 보",
-    "シュウの章難度む":            "슈우편 " + SPACER + " 레벨 어",
+    "シュウの章難度む":            "슈우편" + SPACER + "레벨 어",
     "マサキの章ISSを使いますか?":  "마사키 " + SPACER + " ISS 사용?",
     "何それ?": "뭐야?",
 }
@@ -419,7 +427,7 @@ for _k in range(MC):
     try: _sp = _span_bytes(war, _t)
     except Exception: continue
     for _txt, _b in _sp:
-        if _txt in _LINE_OVERRIDES and _b not in span_map:
+        if _txt in _LINE_OVERRIDES:
             span_map[_b] = _LINE_OVERRIDES[_txt]; _lo += 1
 if _lo: maxspan = max(len(b) for b in span_map)
 print(f"  줄 전체 스팬 오버라이드 등록: {_lo}건")

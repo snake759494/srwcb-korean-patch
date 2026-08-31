@@ -28,7 +28,7 @@ from pathlib import Path
 _d = os.path.dirname(os.path.abspath(__file__))
 while _d != os.path.dirname(_d) and not os.path.exists(os.path.join(_d, "srwcb_paths.py")):
     _d = os.path.dirname(_d)
-for _s in ("", "tools", "image-build"):
+for _s in ("", "tools", "image-build", "second-fixes"):
     _p = os.path.join(_d, _s) if _s else _d
     if _p not in sys.path:
         sys.path.insert(0, _p)
@@ -93,6 +93,23 @@ def main() -> None:
         jp = (_P.EXTRACTED / rel).read_bytes()
         n = check_file(ko, jp, label)
         bad += n
+        if label == "제2차":
+            # 일반 스크립트 게이트는 풀 앞의 바이트만 비교한다. 제2차는
+            # 증원/브리핑 이벤트가 텍스트 풀 레코드 안에도 B1/B3/B4
+            # 참조를 가지므로, 레코드가 이동한 뒤에도 모든 이벤트 참조가
+            # 같은 서수를 가리키는지 별도로 확인한다(#32).
+            from fix_sce_event_refs import retarget
+            _unused, remaining, problems = retarget(
+                ko, jp, apply=False, verbose=False
+            )
+            if problems or remaining:
+                print(
+                    f"  [실패] {label}: 풀 이벤트 참조 잔류 {remaining}, "
+                    f"문제 {len(problems)}"
+                )
+                bad += remaining + len(problems)
+            else:
+                print(f"  {label:5} 풀 이벤트 참조: 잔류 0")
         if not n:
             print(f"  {label:5} 이벤트 스크립트: 포인터 피연산자 외 변경 없음")
     if bad:

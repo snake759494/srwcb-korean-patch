@@ -11,7 +11,7 @@ BGM·데모 제목, 예고편 제목 — 을 본다. 여기 남는 차이는 그
 같은 말을 찾는다. 판정 기준 두 가지 — 공백만 다른 것, 편집거리 1 인 것."""
 import sys, json, re, collections
 from pathlib import Path
-R = Path(r"D:/ps1/roms/SRWCB/srwcb-korean-patch")
+R = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(R/"image-build")); sys.path.insert(0, str(R/"tools"))
 import assemble_image as AI
 from second_translation_codec import load_safe_glyph_map
