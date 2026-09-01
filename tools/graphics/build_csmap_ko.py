@@ -31,6 +31,7 @@ from srw_lz_enc import compress
 import menu_strips as M
 import prologue_strips as PS
 import smap_ko as SM
+import story_graphics as SG
 
 SRC = str(_P.EXTRACTED / "C_SMAP.BIN")
 OUT = f"{SP}/gfx/C_SMAP_ko.BIN"
@@ -46,6 +47,7 @@ TITLE_TARGETS = (
 # 오프닝 프롤로그: 멤버 34 는 스트림이 두 개다. 두 번째(파일 0x148D5D)가 글판이다.
 PROLOGUE_MEMBER = 34
 PROLOGUE_AT = 0x148D5D
+STORY_TARGETS = tuple(SG.PATCHES)
 
 
 def members(d):
@@ -171,6 +173,34 @@ def main():
     print(f"  프롤로그 재압축 {proom:,} -> {len(pnew):,} (여유 {proom-len(pnew):,}B), 글판 8장")
     out[PROLOGUE_AT:PROLOGUE_AT + len(pnew)] = pnew
 
+    # ── EX 오프닝·제3차 엔딩/예고편 그래픽 글판 ───────────────────────────
+    # 세이브스테이트 VRAM 역검색으로 확인한 멤버들이다. 각 멤버는 하나의
+    # 압축 스트림을 쓰므로, 멤버 표를 움직이지 않고 자기 방 안에서만 다시
+    # 압축한다. 인용문은 여러 TIM 프레임, 나머지는 고정 글판/타이틀이다.
+    story_results = []
+    story_ids = {target for target, _spec, _label in STORY_TARGETS}
+    for story_target, spec, story_label in STORY_TARGETS:
+        ss, se = ms[story_target]
+        sraw, sused = decompress(d[ss:se], 0)
+        # 일부 대형 크레딧 멤버는 표가 예약한 범위 뒤에 0 패딩이 있다. 실제
+        # 종료 마커까지의 소비 길이만 재압축 예산으로 쓰고 패딩은 그대로 둔다.
+        sbody = bytearray(sraw)
+        sbefore = tims(sraw)
+        touched = SG.redraw(sbody, sbefore, spec)
+        assert tims(bytes(sbody)) == sbefore, f"{story_label} TIM 목록이 바뀜"
+        stray = [i for i in range(len(sraw)) if sraw[i] != sbody[i]
+                 and not any(lo <= i < hi for lo, hi in touched)]
+        assert not stray, f"{story_label} 지정 범위 밖 변경 {len(stray)}바이트"
+        snew = compress(bytes(sbody))
+        sroom = sused
+        assert len(snew) <= sroom, f"{story_label} 재압축 {len(snew)} > {sroom} — 자리 부족"
+        schk, su2 = decompress(snew, 0)
+        assert schk == bytes(sbody) and su2 == len(snew), f"{story_label} 재압축 왕복 실패"
+        print(f"  {story_label}: 재압축 {sroom:,} -> {len(snew):,} "
+              f"(여유 {sroom-len(snew):,}B, TIM {len(touched)}개)")
+        out[ss:ss + len(snew)] = snew
+        story_results.append((story_target, ss, se, bytes(sbody), len(snew), sroom))
+
     outb = bytes(out)
     assert len(outb) == len(d), "파일 크기 변동"
     os.makedirs(f"{SP}/gfx", exist_ok=True)
@@ -180,7 +210,8 @@ def main():
     n2, ms2 = members(outb)
     assert n2 == n and ms2 == ms, "표가 바뀜"
     for i, (a, b) in enumerate(ms):
-        if i in (TARGET, PROLOGUE_MEMBER) or i in {target for target, _ in TITLE_TARGETS}:
+        if i in (TARGET, PROLOGUE_MEMBER) or i in {target for target, _ in TITLE_TARGETS} \
+                or i in story_ids:
             continue
         assert outb[a:b] == d[a:b], f"멤버 {i} 변경됨"
     # 검증 ② 대상 멤버가 패치된 픽셀로 해제되고, 소비 길이가 원본 범위 안
@@ -194,6 +225,10 @@ def main():
     assert o6 == bytes(pbody) and u7 == len(pnew) <= proom
     # 멤버34 의 **첫 번째** 스트림은 손대지 않았는지
     assert outb[ps:PROLOGUE_AT] == d[ps:PROLOGUE_AT], "멤버34 첫 스트림이 변경됨"
+    for story_target, ss, se, expected, snew_len, sroom in story_results:
+        so, su = decompress(outb[ss:se], 0)
+        assert so == expected and su == snew_len <= sroom, \
+            f"스토리 멤버 {story_target} 검증 실패"
     print(f"  검증 통과: 파일 {len(outb):,}B (원본과 동일), 멤버 {len(ms)}개 위치 불변")
     print(f"WROTE {OUT}")
 

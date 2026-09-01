@@ -301,10 +301,11 @@ def step_bmess_tables(files):
 
 
 def step_csmap(files):
-    if not CSMAP.exists():
-        print("  게임 선택 화면 그래픽 생성")
-        subprocess.run([sys.executable, str(_P.REPO / "tools" / "graphics" / "build_csmap_ko.py")],
-                       check=True)
+    # 그래픽 빌더가 제2차 메뉴뿐 아니라 EX 오프닝·제3차 엔딩/예고편도
+    # 재구성하므로, 이전 산출물 캐시를 그대로 쓰면 새 글판이 빠진다.
+    print("  C_SMAP 게임 선택·엔딩 그래픽 생성")
+    subprocess.run([sys.executable, str(_P.REPO / "tools" / "graphics" / "build_csmap_ko.py")],
+                   check=True)
     files["C_SMAP.BIN"] = need(CSMAP, "한글 C_SMAP").read_bytes()
     # 번역 파일이 바뀌면 다시 그려야 하므로 캐시하지 않는다(30초쯤 걸린다).
     print("  시나리오 예고 타이틀 카드 그래픽 생성")
