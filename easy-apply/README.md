@@ -1,7 +1,7 @@
 # 간편 적용 설치 도구 (컴플리트 박스)
 
 이 폴더의 소스로 릴리스의 easy-apply zip 을 구성합니다.
-**최신: v0.11.50** — EX 오프닝 인용문 가독성 수정과 제3차 엔딩·예고편·크레딧 그래픽을 포함한
+**최신: v0.11.51** — EX 오프닝 인용문 가독성 재수정과 제3차 엔딩·예고편·크레딧 그래픽을 포함한
 제2차·제3차·EX·트레이닝 모드 컴플리트 박스 패치.
 
 - `한글패치 적용하기.bat` — ASCII 런처(더블클릭). PowerShell 실행 정책을 우회해 `apply.ps1` 만 실행합니다.
@@ -13,6 +13,7 @@
 `xdelta.exe` 는 라이선스상 저장소에 커밋하지 않습니다.
 
 버전별 대상 패치:
+- v0.11.51: `srwcb-second-third-ex-korean-v0.11.51.xdelta` (게임용 Galmuri14 픽셀 글꼴로 EX 인용문 가독성 재수정)
 - v0.11.50: `srwcb-second-third-ex-korean-v0.11.50.xdelta` (EX 오프닝 인용문 가독성 재수정)
 - v0.11.49: `srwcb-second-third-ex-korean-v0.11.49.xdelta` (EX 오프닝·제3차 엔딩/예고편 그래픽)
 - v0.11.48: `srwcb-second-third-ex-korean-v0.11.48.xdelta` (제2차 페이즈 종료 문구·동적 숫자 겹침 수정)

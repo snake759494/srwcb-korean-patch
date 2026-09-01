@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import struct
 from collections import Counter
+from functools import lru_cache
+from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
@@ -18,7 +20,10 @@ import title_menu_strips as TM
 
 FONT = "C:/Windows/Fonts/HANDotum.ttf"
 FONT_FALLBACK = "C:/Windows/Fonts/malgun.ttf"
-QUOTE_FONT = "C:/Windows/Fonts/NotoSansKR-VF.ttf"
+QUOTE_BDF = Path(__file__).resolve().parents[2] / "font" / "Galmuri14.bdf"
+QUOTE_INK_WIDTH = 9
+QUOTE_ADVANCE = 10
+QUOTE_BASELINE = 14
 SS = 4
 
 
@@ -123,39 +128,109 @@ def _luminance(rgb: tuple[int, int, int]) -> float:
     return rgb[0] * 0.299 + rgb[1] * 0.587 + rgb[2] * 0.114
 
 
-def _quote_mask(text: str, width: int, height: int, band: tuple[int, int]) -> list[list[bool]]:
-    """기울임·과도한 팽창 없이 읽히는 인용문 마스크를 만든다."""
-    top, bottom = band
-    band_height = max(8, bottom - top + 1)
-    font = None
-    for path in (QUOTE_FONT, FONT, FONT_FALLBACK):
-        for size in range(band_height + 6, 5, -1):
-            try:
-                candidate = ImageFont.truetype(path, size * SS)
-            except OSError:
+@lru_cache(maxsize=1)
+def _quote_glyphs() -> dict[int, tuple[int, int, int, int, tuple[int, ...], int]]:
+    """인용문에 쓰는 Galmuri14 BDF 글리프를 읽는다."""
+    if not QUOTE_BDF.is_file():
+        raise SystemExit(f"인용문 비트맵 글꼴이 없습니다: {QUOTE_BDF}")
+    lines = QUOTE_BDF.read_text(encoding="utf-8").splitlines()
+    glyphs: dict[int, tuple[int, int, int, int, tuple[int, ...], int]] = {}
+    pos = 0
+    while pos < len(lines):
+        if not lines[pos].startswith("STARTCHAR "):
+            pos += 1
+            continue
+        pos += 1
+        encoding = None
+        bbx = None
+        bitmap: list[int] = []
+        while pos < len(lines) and lines[pos] != "ENDCHAR":
+            line = lines[pos]
+            if line.startswith("ENCODING "):
+                encoding = int(line.split()[1])
+            elif line.startswith("BBX "):
+                _, w, h, xoff, yoff = line.split()
+                bbx = (int(w), int(h), int(xoff), int(yoff))
+            elif line == "BITMAP":
+                pos += 1
+                while pos < len(lines) and lines[pos] != "ENDCHAR":
+                    bitmap.append(int(lines[pos], 16))
+                    pos += 1
                 break
-            probe = Image.new("L", (width * SS * 2, band_height * SS + 32), 0)
-            box = ImageDraw.Draw(probe).textbbox((0, 0), text, font=candidate)
-            if box[2] - box[0] <= max(1, width - 1) * SS and box[3] - box[1] <= band_height * SS:
-                font = candidate
-                break
-        if font is not None:
-            break
-    if font is None:
-        raise SystemExit(f"인용문 글꼴 크기를 정하지 못했습니다: 폭={width}, 높이={band_height}")
+            pos += 1
+        if encoding is not None and encoding >= 0 and bbx is not None:
+            w, h, xoff, yoff = bbx
+            if len(bitmap) == h:
+                glyphs[encoding] = (w, h, xoff, yoff, tuple(bitmap), ((w + 7) // 8) * 8)
+        pos += 1
+    return glyphs
 
-    canvas = Image.new("L", (width * SS, height * SS), 0)
-    draw = ImageDraw.Draw(canvas)
-    box = draw.textbbox((0, 0), text, font=font)
-    text_h = box[3] - box[1]
-    x = -box[0]
-    y = top * SS + max(0, (band_height * SS - text_h) // 2) - box[1]
-    draw.text((x, y), text, font=font, fill=255)
-    canvas = canvas.resize((width, height), Image.Resampling.LANCZOS)
-    return [
-        [canvas.getpixel((x, y)) > 80 for x in range(width)]
-        for y in range(height)
-    ]
+
+def _quote_cell(char: str, ink_width: int, baseline: int) -> list[list[bool]]:
+    """Galmuri14 글리프 하나를 16x16 1bpp 셀로 복원한다."""
+    glyph = _quote_glyphs().get(ord(char))
+    if glyph is None:
+        raise SystemExit(f"인용문 글꼴에 글리프가 없습니다: U+{ord(char):04X}")
+    width, height, _xoff, yoff, bitmap, bitmap_bits = glyph
+    cell = [[False] * 16 for _ in range(16)]
+    top = baseline - (yoff + height - 1)
+    for source_y, row_bits in enumerate(bitmap):
+        for source_x in range(width):
+            if not row_bits & (1 << (bitmap_bits - 1 - source_x)):
+                continue
+            if width <= ink_width:
+                scaled_x = source_x + (ink_width - width) // 2
+            else:
+                scaled_x = (source_x * ink_width) // width
+            x = 1 + scaled_x
+            y = top + source_y
+            if 0 <= x < 16 and 0 <= y < 16:
+                cell[y][x] = True
+    return cell
+
+
+def _quote_layout(char: str) -> tuple[int, int | None]:
+    """문자별 표시 폭과 픽셀 잉크 폭을 정한다."""
+    if char == " ":
+        return 5, None
+    if char in ".,":
+        return 3, 1
+    if char == "-":
+        return 5, 5
+    glyph = _quote_glyphs().get(ord(char))
+    if glyph is None:
+        raise SystemExit(f"인용문 글꼴에 글리프가 없습니다: U+{ord(char):04X}")
+    if ord(char) < 0x80:
+        ink = min(7, max(4, glyph[0] - 1))
+        return ink + 1, ink
+    return QUOTE_ADVANCE, QUOTE_INK_WIDTH
+
+
+def _quote_mask(text: str, width: int, height: int, band: tuple[int, int]) -> list[list[bool]]:
+    """게임 본문과 같은 픽셀 글꼴로 읽히는 인용문 마스크를 만든다."""
+    top, bottom = band
+    baseline = QUOTE_BASELINE + int(round(((top + bottom) - 15) / 2))
+    mask = [[False] * width for _ in range(height)]
+    x = 0
+    for char in text:
+        advance, ink_width = _quote_layout(char)
+        if x + advance > width:
+            raise SystemExit(f"인용문이 프레임 폭을 넘습니다: '{text}' ({x + advance}>{width})")
+        if ink_width is not None:
+            cell = _quote_cell(char, ink_width, baseline)
+            for y in range(min(height, 16)):
+                for xx in range(min(16, width - x)):
+                    if cell[y][xx]:
+                        mask[y][x + xx] = True
+        x += advance
+    return mask
+
+
+def _quote_band(source: list[list[int]], pal: list[tuple[int, int, int]], bg: int) -> tuple[int, int]:
+    """장식 테두리를 제외한 원본의 밝은 글자 영역을 찾는다."""
+    core = TM.body_index(source, bg, pal)
+    ys = [y for y, row in enumerate(source) if core in row]
+    return (min(ys), max(ys)) if ys else TM.text_band(source, bg)
 
 
 def _indexed_block(data: bytes | bytearray, tim: tuple, lines: list[str], margin: int) -> list[list[int]]:
@@ -250,7 +325,7 @@ def _prefixes(
         max_w = last[2]
         final_source = _read4(body, last)
         final_bg = TM.background(final_source)
-        band = TM.text_band(final_source, final_bg)
+        band = _quote_band(final_source, _palette(body, last), final_bg)
         full = _left_align(_quote_mask(text, max_w, 16, band))
         for idx in indices:
             tim = tl[idx]
