@@ -1,7 +1,7 @@
 # 간편 적용 설치 도구 (컴플리트 박스)
 
 이 폴더의 소스로 릴리스의 easy-apply zip 을 구성합니다.
-**최신: v0.11.45** — 제2차·제3차·EX·트레이닝 모드 컴플리트 박스 패치.
+**최신: v0.11.46** — 제2차·제3차·EX·트레이닝 모드 컴플리트 박스 패치.
 
 - `한글패치 적용하기.bat` — ASCII 런처(더블클릭). PowerShell 실행 정책을 우회해 `apply.ps1` 만 실행합니다.
 - `apply.ps1` — 실제 적용 엔진(UTF-8 BOM). SHA-256 검증 → xdelta 패치 → 결과 검증 → `.cue` 생성.
@@ -12,5 +12,6 @@
 `xdelta.exe` 는 라이선스상 저장소에 커밋하지 않습니다.
 
 버전별 대상 패치:
+- v0.11.46: `srwcb-second-third-ex-korean-v0.11.46.xdelta` (제2차·제3차·EX 전체, 컴플리트 박스 타이틀 메뉴 통일)
 - v0.11.45: `srwcb-second-third-ex-korean-v0.11.45.xdelta` (제2차·제3차·EX 전체)
 - v0.8.7: `srwcb-second-korean-v0.8.7.xdelta` (제2차 전체)

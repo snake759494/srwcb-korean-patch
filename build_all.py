@@ -147,6 +147,8 @@ def main() -> None:
              "--extracted", str(P.EXTRACTED)])
         run("예고 타이틀 카드 검증(CB)",
             [str(REPO / "audit" / "verify_eyecatch.py"), "--cb-only"])
+        run("타이틀 메뉴 그래픽 검증",
+            [str(REPO / "audit" / "verify_title_menus.py")])
     if want(9):
         # 별매 CD 를 가진 사람만. 먼저 setup_standalone.py 로 준비한다.
         # 예고 타이틀 카드 그래픽은 네 디스크가 같은 파일을 쓴다 — 없으면 만든다.
