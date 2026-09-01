@@ -5,6 +5,32 @@
 제2차에서 이미 검증한 **세이브스테이트 VRAM 역검색 → TIM 원본 폭 유지 → 제자리 재압축**
 경로로 그래픽 자산을 패치합니다.
 
+## 변경 그래픽 PNG 미리보기
+
+아래 이미지는 릴리즈에 포함된 `C_SMAP.BIN`의 패치된 TIM 픽셀을 2배 근접 보간으로
+렌더링한 대표 미리보기입니다. EX 인용문은 타자기 애니메이션의 최종 글자 상태를,
+나머지는 교체된 글판·타이틀 블록을 묶어 표시합니다.
+
+### EX 오프닝 인용문·프롤로그
+
+![EX 오프닝 인용문과 프롤로그](https://raw.githubusercontent.com/snake7594/srwcb-korean-patch/main/docs/assets/v0.11.49/ex-opening.png)
+
+### EX 보조 인용문·내레이션
+
+![EX 보조 인용문과 내레이션](https://raw.githubusercontent.com/snake7594/srwcb-korean-patch/main/docs/assets/v0.11.49/ex-supplement.png)
+
+### 제3차 예고편
+
+![제3차 예고편 그래픽](https://raw.githubusercontent.com/snake7594/srwcb-korean-patch/main/docs/assets/v0.11.49/third-trailer.png)
+
+### 제3차 엔딩·라스트 배틀 후반부
+
+![제3차 엔딩 그래픽](https://raw.githubusercontent.com/snake7594/srwcb-korean-patch/main/docs/assets/v0.11.49/third-ending.png)
+
+### 제3차 스태프롤
+
+![제3차 스태프롤 그래픽](https://raw.githubusercontent.com/snake7594/srwcb-korean-patch/main/docs/assets/v0.11.49/credits.png)
+
 ## EX 오프닝 — #21
 
 `C_SMAP.BIN` 멤버 40(파일 `0x180412`, 해제 141,216B)을 확정했습니다.
