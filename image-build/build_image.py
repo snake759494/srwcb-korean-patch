@@ -4,7 +4,7 @@
 3~6단계가 만든 것들은 아직 '주입 직후' 상태다. 여기서 그동안 따로 돌리던 교정을
 전부 순서대로 적용한 뒤 레트일 위에 한 번에 조립한다.
 
-    1. 제2차 이미지에서 SECOND.WAR / SLPS_020.70 을 꺼낸다
+    1. 제2차 확장 빌드의 font_extracted에서 SECOND.WAR / SLPS_020.70 을 읽는다
     2. 종료(전원끄기) 메시지 한글 주입 — SECOND.WAR / THIRD.WAR
     3. 이벤트 스크립트 포인터 재조준 — 2_SCE / 3_SCE / E_SCE
        (안 하면 브리핑에서 멈춘다)
@@ -39,16 +39,14 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(_P.TOOLS))
-from extract_psx_iso import RawMode2Image, read_tree  # noqa: E402
 import assemble_image as AI  # noqa: E402
 
 W = _P.WORK
-SECOND_IMG = (_P.BUILD / "second_korean_v0.8.7-full-menus" /
-              "Super Robot Taisen Complete Box Second Korean v0.8.7-full-menus (Track 1).bin")
 TH = W / "test_build" / "third_full"
 EX = W / "test_build" / "ex_full"
 TR = W / "test_build" / "tr_full"
 S2 = _P.BUILD / "second_korean_v0.8.7-full-menus"
+SECOND_RUNTIME = S2 / "font_extracted"
 
 RAW = {
     "BMESS2.BIN": S2 / "rebuilt" / "BMESS2.BIN",
@@ -81,18 +79,13 @@ def need(p: Path, what: str) -> Path:
     return p
 
 
-def from_image(img: Path, name: str) -> bytes:
-    with RawMode2Image(img) as m:
-        _, E = read_tree(m)
-    e = next(x for x in E if x.path.strip("/") == name)
-    return AI.read_file(img, e.lba, e.size)
-
-
 def collect() -> dict:
     files = {k: need(v, k).read_bytes() for k, v in RAW.items()}
-    need(SECOND_IMG, "제2차 빌드 이미지")
     for n in ("SECOND/SECOND.WAR", "SLPS_020.70"):
-        files[n] = from_image(SECOND_IMG, n)
+        # 제2차 UI 주입기의 최신 결과를 읽어야 한다. 예전에는 여기서
+        # v0.8.7 이미지의 파일을 다시 추출해, 중간 빌드에 있던 최신 UI
+        # 교정(예: 페이즈 종료 제어폭)을 최종 CB 이미지에서 되돌려 버렸다.
+        files[n] = need(SECOND_RUNTIME / Path(n), n).read_bytes()
     return files
 
 
