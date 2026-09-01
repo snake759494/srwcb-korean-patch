@@ -10139,7 +10139,8 @@
               "source_hex": "EC 8C EC 51 EC E4 EC E5 56 65 43 69 43 D5 BA B2 B7 4B 00 00 EC 74 41 89 7D 58",
               "source_sha256": "b3656ebd034cdc2906bb2e8f6298cac3486a430936ccbc7d239e50a17ea169ba",
               "japanese_text": "行動終了していないユニットが　　体あります",
-              "korean_text": "행동을 마치지 않은 유닛이　　기 남았습니다"
+              "korean_text": "행동을 마치지 않은 유닛이　　기 남았습니다",
+              "display_text": "미행동 유닛이   기 있습니다"
             },
             {
               "relative_start": 46,

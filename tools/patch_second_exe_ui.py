@@ -387,6 +387,8 @@ COMPLETE_UI_TEXT_TRANSLATIONS = {
 # semantically clearer when it retains spaces, but those spaces cannot be
 # allowed to push into the next column.  These reviewed short forms are used
 # only in fixed UI fields; dialogue and table text keeps its full translation.
+SECOND_PHASE_END_DISPLAY = "미행동 유닛이   기 있습니다"
+
 UI_DISPLAY_COMPACTION = {
     "空": "공",
     "陸": "육",
@@ -406,7 +408,7 @@ UI_DISPLAY_COMPACTION = {
     "作戦目的": "작전목적",
     "精神検索": "정신검색",
     "出撃ユニット選択　あと": "출격 유닛 남은",
-    "行動終了していないユニットが　　体あります": "미행동 유닛이　　기 남음",
+    "行動終了していないユニットが　　体あります": SECOND_PHASE_END_DISPLAY,
     "よろしいですか?": "확인할까요?",
     "しますか?": "할까요?",
     "勝利条件": "승리조건",
@@ -520,7 +522,10 @@ UI_DISPLAY_COMPACTION.update({
     "精神検索": "정신검색",
     "精神検索一覧": "정신검색",
     "出撃ユニット選択　あと": "출격유닛선택　남은",
-    "行動終了していないユニットが　　体あります": "미행동 유닛　　기",
+    # This field is followed by a dynamic remaining-unit count.  Keep the
+    # visible suffix after the count; the old short alias left ``기`` at the
+    # retail position, so FC 0B's moved count overwrote that glyph.
+    "行動終了していないユニットが　　体あります": SECOND_PHASE_END_DISPLAY,
     "積極的に!": "적극!",
     "効率よく!": "효율!",
     "反撃するな!": "반격금지!",

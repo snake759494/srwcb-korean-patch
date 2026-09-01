@@ -1,0 +1,12 @@
+46ead4c01d742c6bfddbbc3b0bb86415a998db546c06937f54bb1b60c05ab3f4  srwcb-second-third-ex-korean-v0.11.48.xdelta
+b778057e5133fb89dc12aeaee46c917fe1e64a9a277ff74e5b4de7f1f4799703  srwcb-cb-korean-v0.11.48.cue
+3dc17010556e4f8260c472e0a30e24e0d57746679b115b803f5e58fb468b61d3  srw2-standalone-korean-v0.11.48.xdelta
+68676ab6aa79faad66a86066ae4b90f70a02334d07f24109bacf0b1a1b6da3e7  srw2-standalone-korean-v0.11.48.cue
+a6f5caf28f96568f9e8bc554585b3c0d65f252d0419b04ebe10206a46ab268db  srw3-standalone-korean-v0.11.48.xdelta
+74994e19e6ecbfd9414aa1154091ceb2908dab84eb21afc80ac2730ca7ce9575  srw3-standalone-korean-v0.11.48.cue
+6d8834052a22cc1dacca150e00652f906e1d8c2335773d050a9338df5ce6eebf  srwex-standalone-korean-v0.11.48.xdelta
+17b44fa6bb26fa4f410b3e517d9a483994cfc82f7ea9627150f06debe7d9375b  srwex-standalone-korean-v0.11.48.cue
+9b3a76644e956339bce6691ca5f6853fe57cdb91d234be17fed2b48320b111a4  srwcb-cb-korean-v0.11.48-easy-apply.zip
+
+# 패치 결과 이미지
+6dc266623b5653ee8b6ddada6685aa3820aef861fc9a9966a3ee31f14c11682b  Super Robot Taisen Complete Box Korean v0.11.48 (Track 1).bin
