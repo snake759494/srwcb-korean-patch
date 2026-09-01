@@ -1,6 +1,12 @@
 # 슈퍼로봇대전 컴플리트 박스 한국어 패치
 
->  **v0.11.51 (최신)** — GitHub 이슈 **#21**의 EX 오프닝 인용문·프롤로그를 게임 본문과
+>  **v0.11.52 (최신)** — GitHub 이슈 **#38**을 재검증하는 과정에서 확인한 Track 2 누락/잘못된 CUE 경로를
+> 적용 전에 차단하도록 간편 적용기의 Track 1·Track 2 검증을 강화했습니다. 제3차 이슈 **#20**
+> 분석에 쓰는 DuckStation 세이브스테이트 zstd 로더도 현재 환경에서 동작하도록 보완했습니다.
+> 제2차·제3차·EX의 검증된 그래픽·메뉴 패치는 그대로 포함합니다. 자세한 내용은
+> [v0.11.52](docs/RELEASE_NOTES_v0.11.52.md) 릴리즈 노트.
+
+> 이전 **v0.11.51** — GitHub 이슈 **#21**의 EX 오프닝 인용문·프롤로그를 게임 본문과
 > 같은 **Galmuri14 픽셀 글꼴**로 다시 조합해 가독성을 개선했습니다. `고도로 발달한
 > 과학기술은 마술과 구분할 수 없다. 아서 C. 클라크`와 `자유롭다는 것은, 자유롭도록
 > 저주받은....` 문장을 4bpp TIM에 넣고 원본 폭·팔레트·애니메이션 단계는 보존했습니다.
@@ -256,7 +262,7 @@
 
 ### 간편 적용 (Windows, 권장)
 
-릴리스에서 easy-apply zip(최신 **`srwcb-cb-korean-v0.11.48-easy-apply.zip`**,
+릴리스에서 easy-apply zip(최신 **`srwcb-cb-korean-v0.11.52-easy-apply.zip`**,
 제2차 전용은 `srwcb-second-korean-v0.8.7-easy-apply.zip`)을 받아 압축을 풀면
 `xdelta.exe`·패치·적용 스크립트가 모두 들어 있습니다.
 
@@ -283,30 +289,32 @@
 원본 SHA-256:
 3f25650b588774d55c3bbb5b771779beab408eaca020e9a622133ade323a0f94
 
-패치 결과 크기: 568,386,672 bytes
+패치 결과 크기: 566,949,600 bytes
 패치 결과 SHA-256:
-862dadb0dbeec279ff0db67701ee1a84c58b39ee0e72a909bc1708a2d32b82f9
+766be6fcc829306fa56fe5380abee1a95a6a16ca3c613cc996d825432b651ece
 ```
 
-저장소 루트에 `xdelta.exe`가 있을 때:
+저장소 루트에 `xdelta.exe`와 릴리스의 v0.11.52 xdelta를 내려받았을 때:
 
 ```powershell
 .\apply_patch.ps1 `
   -SourceTrack1 ".\Super Robot Taisen Complete Box (Track 1).bin" `
-  -SourceTrack2 ".\Super Robot Taisen Complete Box (Track 2).bin"
+  -SourceTrack2 ".\Super Robot Taisen Complete Box (Track 2).bin" `
+  -PatchPath ".\release\srwcb-second-third-ex-korean-v0.11.52.xdelta"
 ```
 
 `SourceTrack2`는 선택 사항입니다. 지정하면 패치된 Track 1과 원본
-Track 2를 연결하는 CUE를 함께 만듭니다. Track 2 자체는 변경하지
-않습니다.
+Track 2를 연결하는 CUE를 함께 만들고 Track 2의 SHA-256도 검증합니다.
+컴플리트 박스를 음악과 함께 실행할 때는 Track 2를 반드시 지정하고, 생성된
+CUE를 여세요. Track 2 자체는 변경하지 않습니다.
 
 직접 적용하려면:
 
 ```powershell
 .\xdelta.exe -d -s `
   ".\Super Robot Taisen Complete Box (Track 1).bin" `
-  ".\release\srwcb-second-korean-v0.8.7.xdelta" `
-  ".\Super Robot Taisen Complete Box Second Korean v0.8.7 (Track 1).bin"
+  ".\release\srwcb-second-third-ex-korean-v0.11.52.xdelta" `
+  ".\Super Robot Taisen Complete Box Korean v0.11.52 (Track 1).bin"
 ```
 
 ## 단독판(별매 CD) 지원

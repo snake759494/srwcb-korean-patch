@@ -19,8 +19,8 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $ExpectedSourceHash = '3f25650b588774d55c3bbb5b771779beab408eaca020e9a622133ade323a0f94'
-$ExpectedOutputHash = 'e5d28d78005b08b5f1abbd7a381440c3f90438fc67657dafe62e26cb6b2206be'
-$ExpectedPatchHash = 'ff5e532f1e9e1626df74e48adf86559d6b919a8db2cfb5b30799a93a9ba3e78c'
+$ExpectedOutputHash = '766be6fcc829306fa56fe5380abee1a95a6a16ca3c613cc996d825432b651ece'
+$ExpectedPatchHash = '1aacb9acbbc3fcb4d02616a3a5e5fa45db0e11a8f3e2b8f8f3e00330d0f5ab46'
 $ExpectedTrack2Hash = '2fbf5a94ffc8b475741529c4a95d580c937ca37db31db227e0d6c7a917a1e95f'
 
 function Get-RelativeFilePath {
@@ -48,7 +48,7 @@ if (-not $XdeltaPath) {
     $XdeltaPath = Join-Path $PSScriptRoot 'xdelta.exe'
 }
 if (-not $PatchPath) {
-    $PatchPath = Join-Path $PSScriptRoot 'release\srwcb-second-korean-v0.2.1-pre.xdelta'
+    $PatchPath = Join-Path $PSScriptRoot 'release\srwcb-second-third-ex-korean-v0.11.52.xdelta'
 }
 
 $source = (Resolve-Path -LiteralPath $SourceTrack1).Path
@@ -63,7 +63,7 @@ if ($patchHash -ne $ExpectedPatchHash) {
 if (-not $OutputTrack1) {
     $OutputTrack1 = Join-Path (
         [IO.Path]::GetDirectoryName($source)
-    ) 'Super Robot Taisen Complete Box Second Korean v0.2.1-pre (Track 1).bin'
+    ) 'Super Robot Taisen Complete Box Korean v0.11.52 (Track 1).bin'
 }
 $output = [IO.Path]::GetFullPath($OutputTrack1)
 if ($source.Equals($output, [StringComparison]::OrdinalIgnoreCase)) {
@@ -91,7 +91,7 @@ if ($SourceTrack2) {
     if (-not $OutputCue) {
         $OutputCue = Join-Path (
             $outputDirectory
-        ) 'Super Robot Taisen Complete Box Second Korean v0.2.1-pre.cue'
+        ) 'Super Robot Taisen Complete Box Korean v0.11.52.cue'
     }
     $cue = [IO.Path]::GetFullPath($OutputCue)
     if ($cue.Equals($output, [StringComparison]::OrdinalIgnoreCase)) {

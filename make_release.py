@@ -29,6 +29,8 @@ sys.path.insert(0, str(REPO))
 import srwcb_paths as P  # noqa: E402
 
 XDELTA = Path(os.environ.get("SRWCB_XDELTA", P.WORK / "xdelta.exe"))
+TRACK2_NAME = "Super Robot Taisen Complete Box (Track 2).bin"
+TRACK2_SHA256 = "2fbf5a94ffc8b475741529c4a95d580c937ca37db31db227e0d6c7a917a1e95f"
 
 
 def sha(p: Path) -> str:
@@ -99,13 +101,27 @@ def main() -> None:
     if not XDELTA.exists():
         raise SystemExit(f"[없음] xdelta3: {XDELTA}\n  SRWCB_XDELTA 로 지정하세요.")
 
-    print("\n[2/4] CB 패치 생성")
     disc = P.disc()
+    track2 = disc.with_name(TRACK2_NAME)
+    if not track2.is_file():
+        raise SystemExit(
+            f"[없음] 컴플리트 박스 Track 2: {track2}\n"
+            "  Track 1과 같은 폴더에 원본 오디오 트랙을 두세요."
+        )
+    track2_hash = sha(track2)
+    if track2_hash != TRACK2_SHA256:
+        raise SystemExit(
+            f"[실패] 지원하지 않는 Track 2 SHA-256: {track2}\n"
+            f"  현재값: {track2_hash}\n"
+            f"  기대값: {TRACK2_SHA256}"
+        )
+
+    print("\n[2/4] CB 패치 생성")
     cbp = xdelta(disc, cb_img, REL / f"srwcb-second-third-ex-korean-{VER}.xdelta")
     if not verify(disc, cbp, cb_img):
         raise SystemExit("[실패] CB xdelta 역적용 불일치")
     cbc = REL / f"srwcb-cb-korean-{VER}.cue"
-    cue(cbc, cb_img.name, "Super Robot Taisen Complete Box (Track 2).bin")
+    cue(cbc, cb_img.name, track2.name)
     print(f"  {cbp.name} {cbp.stat().st_size:,}B  역적용 OK")
     assets = [cbp, cbc]
 

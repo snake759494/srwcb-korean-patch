@@ -1,5 +1,5 @@
 @echo off
-rem === Super Robot Taisen Complete Box Korean patch v0.11.45 ===
+rem === Super Robot Taisen Complete Box Korean patch v0.11.52 ===
 rem ASCII-only launcher. All Korean messages are printed by apply.ps1.
 rem Double-click this file, or drag the retail "(Track 1).bin" onto it.
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0apply.ps1" %*

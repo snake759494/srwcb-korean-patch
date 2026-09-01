@@ -1,5 +1,5 @@
 ﻿#requires -version 3
-# 슈퍼로봇대전 컴플리트 박스 한글패치 v0.11.51 (제2차 + 제3차 + EX 전체) 적용 엔진
+# 슈퍼로봇대전 컴플리트 박스 한글패치 v0.11.52 (제2차 + 제3차 + EX 전체) 적용 엔진
 # 이 스크립트는 "한글패치 적용하기.bat" 이 자동으로 실행합니다.
 # (직접 실행하려면 원본 Track 1 .bin 을 인자로 넘기거나 같은 폴더에 두세요.)
 
@@ -7,16 +7,17 @@ $ErrorActionPreference = 'Stop'
 
 $root    = $PSScriptRoot
 $xdelta  = Join-Path $root 'xdelta.exe'
-$patch   = Join-Path $root 'srwcb-second-third-ex-korean-v0.11.51.xdelta'
+$patch   = Join-Path $root 'srwcb-second-third-ex-korean-v0.11.52.xdelta'
 
 $T1NAME  = 'Super Robot Taisen Complete Box (Track 1).bin'
 $T2NAME  = 'Super Robot Taisen Complete Box (Track 2).bin'
-$OUTNAME = 'Super Robot Taisen Complete Box Korean v0.11.51 (Track 1).bin'
-$CUENAME = 'Super Robot Taisen Complete Box Korean v0.11.51.cue'
+$OUTNAME = 'Super Robot Taisen Complete Box Korean v0.11.52 (Track 1).bin'
+$CUENAME = 'Super Robot Taisen Complete Box Korean v0.11.52.cue'
 
 $EXP_SRC   = '3f25650b588774d55c3bbb5b771779beab408eaca020e9a622133ade323a0f94'
+$EXP_T2    = '2fbf5a94ffc8b475741529c4a95d580c937ca37db31db227e0d6c7a917a1e95f'
 $EXP_OUT   = '766be6fcc829306fa56fe5380abee1a95a6a16ca3c613cc996d825432b651ece'
-$EXP_PATCH = '0459c15c28aad1b66d1da314cf55c4d939a07b90d420d9a5c551160e18735acb'
+$EXP_PATCH = '1aacb9acbbc3fcb4d02616a3a5e5fa45db0e11a8f3e2b8f8f3e00330d0f5ab46'
 
 function Get-Sha256([string]$p) {
     return (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash.ToLower()
@@ -35,13 +36,13 @@ function Fail([string]$msg) {
 try {
     Write-Host ''
     Write-Host '============================================================'
-    Write-Host '   슈퍼로봇대전 컴플리트 박스 한글패치 v0.11.51'
+    Write-Host '   슈퍼로봇대전 컴플리트 박스 한글패치 v0.11.52'
     Write-Host '   (제2차 + 제3차 + EX 전체)'
     Write-Host '============================================================'
     Write-Host ''
 
     if (-not (Test-Path -LiteralPath $xdelta)) { Fail "xdelta.exe 가 없습니다. 패치 파일들을 한 폴더에 함께 두세요." }
-    if (-not (Test-Path -LiteralPath $patch))  { Fail "srwcb-second-third-ex-korean-v0.11.51.xdelta 가 없습니다." }
+    if (-not (Test-Path -LiteralPath $patch))  { Fail "srwcb-second-third-ex-korean-v0.11.52.xdelta 가 없습니다." }
 
     # --- 원본 Track 1 찾기: 드래그앤드롭 인자 > 스크립트 폴더 > 현재 폴더 ---
     $src = $null
@@ -68,6 +69,15 @@ try {
     $cue = Join-Path $srcdir $CUENAME
     $t2  = Join-Path $srcdir $T2NAME
 
+    # CUE에는 Track 2 AUDIO가 반드시 들어간다. Track 2가 없는데도
+    # Track 1만 패치하고 잘못된 CUE를 만들면, 에뮬레이터가 디스크를
+    # 열지 못하거나 선택 화면 이후 이탈할 수 있으므로 시작 전에 중단한다.
+    if (-not (Test-Path -LiteralPath $t2 -PathType Leaf)) {
+        Fail ("원본 오디오 트랙을 찾을 수 없습니다: $T2NAME`n" +
+              "         원본 Track 1과 Track 2를 같은 폴더에 둔 뒤 다시 실행하세요.`n" +
+              "         Track 1만으로는 이 패치의 CUE를 만들 수 없습니다.")
+    }
+
     Write-Host "  원본: $src"
     Write-Host ''
     Write-Host '  [1/4] 패치 파일 검증...'
@@ -77,6 +87,12 @@ try {
     $sh = Get-Sha256 $src
     if ($sh -ne $EXP_SRC) {
         Fail ("지원하지 않는 원본입니다 (SHA-256 불일치).`n         정품 컴플리트 박스 Track 1 .bin 이 맞는지 확인하세요.`n         현재값: $sh")
+    }
+
+    Write-Host '  원본 Track 2 검증 중...'
+    $t2h = Get-Sha256 $t2
+    if ($t2h -ne $EXP_T2) {
+        Fail ("지원하지 않는 원본 Track 2입니다 (SHA-256 불일치).`n         정품 컴플리트 박스의 오디오 트랙인지 확인하세요.`n         현재값: $t2h")
     }
 
     $needPatch = $true
@@ -102,12 +118,6 @@ try {
             Remove-Item -LiteralPath $out -Force
             Fail ("결과 검증 실패 (SHA-256 불일치). 출력 파일을 삭제했습니다.`n         현재값: $oh")
         }
-    }
-
-    if (-not (Test-Path -LiteralPath $t2)) {
-        Write-Host ''
-        Write-Host "  [경고] 오디오 트랙을 찾지 못했습니다: $T2NAME" -ForegroundColor Yellow
-        Write-Host "         원본 Track 2 .bin 을 같은 폴더에 두어야 음악이 재생됩니다."
     }
 
     $cueLines = @(

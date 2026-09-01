@@ -14,15 +14,30 @@ import sys
 from pathlib import Path
 
 
+def _decompress_zstd(blob: bytes) -> bytes:
+    """압축 모듈 차이를 흡수해 DuckStation zstd 프레임을 푼다.
+
+    예전 작업 환경에는 ``compression.zstd`` 래퍼가 있었지만, 새 환경과
+    일반적인 Python 설치에는 PyPI의 ``zstandard`` 만 제공될 수 있다.
+    세이브스테이트 분석 자체와 무관한 import 차이 때문에 도구가 시작도
+    못 하는 일이 없도록 두 API를 모두 지원한다.
+    """
+    try:
+        from compression import zstd as legacy_zstd
+    except ModuleNotFoundError:
+        import zstandard
+        return zstandard.ZstdDecompressor().decompress(blob)
+    return legacy_zstd.decompress(blob)
+
+
 def frames(raw: bytes):
     """세이브스테이트 안의 zstd 프레임들을 풀어서 돌려준다."""
-    from compression import zstd
     magic = b"\x28\xb5\x2f\xfd"
     out = []
     i = raw.find(magic)
     while i >= 0:
         try:
-            d = zstd.decompress(raw[i:])
+            d = _decompress_zstd(raw[i:])
         except Exception:
             d = None
         if d and len(d) > 0x10000:
