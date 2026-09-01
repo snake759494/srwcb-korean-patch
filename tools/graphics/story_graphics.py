@@ -18,6 +18,7 @@ import title_menu_strips as TM
 
 FONT = "C:/Windows/Fonts/HANDotum.ttf"
 FONT_FALLBACK = "C:/Windows/Fonts/malgun.ttf"
+QUOTE_FONT = "C:/Windows/Fonts/NotoSansKR-VF.ttf"
 SS = 4
 
 
@@ -122,6 +123,41 @@ def _luminance(rgb: tuple[int, int, int]) -> float:
     return rgb[0] * 0.299 + rgb[1] * 0.587 + rgb[2] * 0.114
 
 
+def _quote_mask(text: str, width: int, height: int, band: tuple[int, int]) -> list[list[bool]]:
+    """기울임·과도한 팽창 없이 읽히는 인용문 마스크를 만든다."""
+    top, bottom = band
+    band_height = max(8, bottom - top + 1)
+    font = None
+    for path in (QUOTE_FONT, FONT, FONT_FALLBACK):
+        for size in range(band_height + 6, 5, -1):
+            try:
+                candidate = ImageFont.truetype(path, size * SS)
+            except OSError:
+                break
+            probe = Image.new("L", (width * SS * 2, band_height * SS + 32), 0)
+            box = ImageDraw.Draw(probe).textbbox((0, 0), text, font=candidate)
+            if box[2] - box[0] <= max(1, width - 1) * SS and box[3] - box[1] <= band_height * SS:
+                font = candidate
+                break
+        if font is not None:
+            break
+    if font is None:
+        raise SystemExit(f"인용문 글꼴 크기를 정하지 못했습니다: 폭={width}, 높이={band_height}")
+
+    canvas = Image.new("L", (width * SS, height * SS), 0)
+    draw = ImageDraw.Draw(canvas)
+    box = draw.textbbox((0, 0), text, font=font)
+    text_h = box[3] - box[1]
+    x = -box[0]
+    y = top * SS + max(0, (band_height * SS - text_h) // 2) - box[1]
+    draw.text((x, y), text, font=font, fill=255)
+    canvas = canvas.resize((width, height), Image.Resampling.LANCZOS)
+    return [
+        [canvas.getpixel((x, y)) > 80 for x in range(width)]
+        for y in range(height)
+    ]
+
+
 def _indexed_block(data: bytes | bytearray, tim: tuple, lines: list[str], margin: int) -> list[list[int]]:
     """4bpp 글판을 CLUT 의 본체·윤곽·배경 3단계로 다시 그린다.
 
@@ -164,6 +200,7 @@ def _prefix_frame(
     mask: list[list[bool]],
     pal: list[tuple[int, int, int]],
     bg: int,
+    solid: bool = False,
 ) -> list[list[int]]:
     """원본 스트립의 밝기/윤곽 규칙을 유지한 한 프레임을 만든다."""
     h, w = len(source), len(source[0])
@@ -182,7 +219,7 @@ def _prefix_frame(
             if d is None:
                 continue
             if d > 0:
-                out[y][x] = edge if d == 1 else core
+                out[y][x] = core if solid else (edge if d == 1 else core)
             else:
                 out[y][x] = rule.get(d, bg)
     return out
@@ -214,7 +251,7 @@ def _prefixes(
         final_source = _read4(body, last)
         final_bg = TM.background(final_source)
         band = TM.text_band(final_source, final_bg)
-        full = _left_align(TM.render_mask(text, max_w, 16, band))
+        full = _left_align(_quote_mask(text, max_w, 16, band))
         for idx in indices:
             tim = tl[idx]
             assert tim[1] == 4 and tim[3] == 16, f"인용 TIM 규격 오류: {idx}"
@@ -222,7 +259,7 @@ def _prefixes(
             bg = TM.background(source)
             pal = _palette(body, tim)
             clipped = [[full[y][x] for x in range(tim[2])] for y in range(16)]
-            _write4(body, tim, _prefix_frame(source, clipped, pal, bg))
+            _write4(body, tim, _prefix_frame(source, clipped, pal, bg, solid=True))
             touched.append((tim[6], tim[7]))
     return touched
 
@@ -316,7 +353,7 @@ EX_PATCHES = {
             (list(range(11, 25)), "고도로 발달한"),
             (list(range(25, 37)), "과학기술은"),
             (list(range(37, 47)), "마술과"),
-            (list(range(47, 61)), "구별할 수 없다"),
+            (list(range(47, 61)), "구분할 수 없다."),
             (list(range(61, 69)), "아서 C. 클라크"),
         ],
         "blocks": {
@@ -332,7 +369,7 @@ EX_PATCHES = {
         "prefixes": [
             (list(range(2, 16)), "자유롭다는 것은,"),
             (list(range(16, 31)), "자유롭도록"),
-            (list(range(31, 42)), "저주받은"),
+            (list(range(31, 42)), "저주받은...."),
             (list(range(42, 55)), "존재하는 것이다"),
             (list(range(55, 63)), "J-P. 사르트르"),
         ],
