@@ -45,6 +45,7 @@ s0 이 깨지면 다음 디스패치가 미매핑 주소를 읽어 오픈버스 
 레트일 최대: EX 98 · 제3차 104 · 제2차 100 — **세 게임 모두 위반 0건**.
 따라서 이건 진짜 엔진 한계이고, 배포본도 0건이어야 한다.
 """
+import struct
 import os
 import sys
 from pathlib import Path
@@ -59,7 +60,7 @@ for _s in ("", "tools", "image-build"):
 
 import srwcb_paths as _P                                # noqa: E402
 import assemble_image as AI                             # noqa: E402
-from analyze_sce_relocation import parse_scenarios      # noqa: E402
+from analyze_sce_relocation import parse_scenarios, iter_pointer_sites      # noqa: E402
 
 LIMIT = 127
 CTRL_ARGS = {0xF6: 0, 0xF7: 0, 0xF8: 1, 0xF9: 1, 0xFA: 0,
@@ -100,12 +101,20 @@ def page_lengths(buf, start, end):
 
 
 def dialogue_records(buf):
-    """대사 포인터가 실제로 겨누는 레코드."""
+    """대사 포인터가 실제로 겨누는 레코드.
+
+    `scenario.references` 만 쓰면 **풀 앞 구간**의 참조만 잡혀 산출물의 16~25% 가
+    검사에서 빠진다. 풀 안 이벤트 스크립트가 겨누는 대사가 그 사각지대에 있고,
+    실제로 v0.11.53 에 129·130바이트 페이지가 거기 숨어 있었다(하드행 조건).
+    그래서 block_start~record_data_end 전 구간을 훑는다.
+    """
     out = set()
     for s in parse_scenarios(buf):
         by_start = {r.start: r for r in s.records}
-        for ref in s.references:
-            r = by_start.get(ref.target)
+        for off, operand, _op in iter_pointer_sites(buf, s.block_start,
+                                                    s.record_data_end):
+            target = operand + struct.unpack_from("<h", buf, operand)[0]
+            r = by_start.get(target)
             if r:
                 out.add((r.start, r.end))
     return sorted(out)
