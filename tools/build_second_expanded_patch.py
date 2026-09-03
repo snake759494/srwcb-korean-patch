@@ -1220,30 +1220,13 @@ def main() -> int:
     sce_repl, _ = _FX.harden_against_ff_operands(
         source_sce, sce_repl, rebuild_second_sce)
     rebuilt_sce, sce_manifest = rebuild_second_sce(source_sce, sce_repl)
-    # 이벤트 스크립트는 텍스트 풀 안의 레코드 0 등에 들어 있으며, 그 안의
-    # B1/B3/B4 포인터는 일반 SCE 재빌더가 건드리는 프리풀 포인터와 별개다.
-    # 번역으로 레코드가 이동한 뒤에도 원문 변위를 그대로 두면 증원 대사가
-    # 끝난 지점에서 다음 이벤트를 읽지 못하고 게임이 멈춘다(제보 #32).
-    rebuilt_sce, event_reference_patches, event_reference_problems = _FX.retarget(
-        rebuilt_sce, source_sce, apply=True, verbose=False
-    )
-    if event_reference_problems:
-        raise ValueError(
-            "SCE 이벤트 참조 재조준 실패: "
-            + "; ".join(event_reference_problems[:5])
-        )
-    _, remaining_event_references, verify_event_problems = _FX.retarget(
-        rebuilt_sce, source_sce, apply=False, verbose=False
-    )
-    if verify_event_problems or remaining_event_references:
-        raise ValueError(
-            "SCE 이벤트 참조 검증 실패: "
-            f"남은 참조 {remaining_event_references}, "
-            f"문제 {len(verify_event_problems)}"
-        )
-    sce_manifest["pool_event_reference_patches"] = event_reference_patches
-    sce_manifest["pool_event_references_verified"] = True
-    sce_manifest["output_sha256"] = sha256_bytes(rebuilt_sce)
+    # 풀 안 이벤트 참조의 재조준은 여기서 하지 않는다. 이미지 조립의
+    # step_sce(image-build/build_image.py) 가 최종 파일에 대고 "고칠 게 없을
+    # 때까지 되풀이" 하며 처리한다. 여기서 한 번만 적용하면, 새 변위가 레코드
+    # 훑기에서 0xFF 로 읽혀 경계가 움직였을 때 같은 패스의 서수가 어긋나
+    # 검증이 영영 통과하지 못한다(v0.11.45~v0.11.52 가 이 상태였고, 그걸
+    # 피하려고 scan_pool_refs 에 넓은 가드를 넣어 결국 참조 5곳이 스테일로
+    # 남았다 — 제2차 sc4 와 EX sc8·sc23·sc52·sc55, 제보 #39).
     rebuilt_bmess = rebuild_bmess_repack(source_bmess, bm_repl)
     rebuilt_dead = rebuild_dead(source_dead, dead_repl)
     parsed_bmess = parse_bmess(rebuilt_bmess)

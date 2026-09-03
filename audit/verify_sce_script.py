@@ -93,23 +93,12 @@ def main() -> None:
         jp = (_P.EXTRACTED / rel).read_bytes()
         n = check_file(ko, jp, label)
         bad += n
-        if label == "제2차":
-            # 일반 스크립트 게이트는 풀 앞의 바이트만 비교한다. 제2차는
-            # 증원/브리핑 이벤트가 텍스트 풀 레코드 안에도 B1/B3/B4
-            # 참조를 가지므로, 레코드가 이동한 뒤에도 모든 이벤트 참조가
-            # 같은 서수를 가리키는지 별도로 확인한다(#32).
-            from fix_sce_event_refs import retarget
-            _unused, remaining, problems = retarget(
-                ko, jp, apply=False, verbose=False
-            )
-            if problems or remaining:
-                print(
-                    f"  [실패] {label}: 풀 이벤트 참조 잔류 {remaining}, "
-                    f"문제 {len(problems)}"
-                )
-                bad += remaining + len(problems)
-            else:
-                print(f"  {label:5} 풀 이벤트 참조: 잔류 0")
+        # 풀 안 이벤트 참조는 audit/verify_pool_event_refs.py 가 본다.
+        # 여기서 재조준기(retarget)를 그대로 다시 돌리는 검사를 했었는데,
+        # 재조준기는 자기 필터로 걸러낸 자리를 못 보고(그래서 필터를 넓히면
+        # 게이트도 같이 눈이 먼다), 반대로 레코드 경계가 움직인 자리는
+        # 고쳐도 계속 '잔류' 로 세어 v0.11.44·v0.11.52·v0.11.53 모두에서
+        # 똑같이 실패한다 — 판별력이 없다.
         if not n:
             print(f"  {label:5} 이벤트 스크립트: 포인터 피연산자 외 변경 없음")
     if bad:

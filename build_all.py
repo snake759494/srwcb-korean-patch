@@ -139,6 +139,8 @@ def main() -> None:
             [str(REPO / "audit" / "verify_submode.py"), "--version", a.version])
         run("이벤트 스크립트 검증",
             [str(REPO / "audit" / "verify_sce_script.py"), "--version", a.version])
+        run("풀 이벤트 참조 검증",
+            [str(REPO / "audit" / "verify_pool_event_refs.py"), "--version", a.version])
         run("대사 페이지 길이 검증",
             [str(REPO / "audit" / "verify_page_bytes.py"), "--version", a.version])
         run("용어 통일 검증",

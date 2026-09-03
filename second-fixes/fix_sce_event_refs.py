@@ -73,14 +73,19 @@ def scan_pool_refs(buf, scn):
     refs = []
     for off, operand, op in iter_pointer_sites(buf, scn.pool_start,
                                                scn.record_data_end):
-        # A trailing B1/B3/B4 immediately before FF is ordinary renderer
-        # data at the end of a script record, not a complete pointer.  Without
-        # this boundary guard its first operand byte can be the next record's
-        # first byte; retargeting then overwrites the real FF terminator and
-        # merges two event records (seen in SECOND scenario 4).
+        # 피연산자가 host 레코드 **밖에서 시작**하면 포인터가 아니다(레코드 꼬리에
+        # 우연히 남은 렌더러 데이터). 그때만 버린다.
+        #
+        # 주의: 예전에는 `operand + 1 >= host.end - 1` 로 훨씬 넓게 버렸는데,
+        # 그러면 **피연산자의 낮은 바이트가 곧 레코드 종단자 0xFF 인 진짜 포인터**까지
+        # 함께 버려진다. 제2차 sc4 rec0+0x85 의 B3 가 그런 자리이고(레트일 변위
+        # 0x05FF -> 서수 45), v0.11.45~v0.11.52 에서 이 한 곳이 스테일로 남아
+        # 제2차 초반 이벤트가 남의 레코드 한가운데로 뛰어 정지했다(#39).
+        # 이 함수는 재조준기와 그 게이트가 함께 쓰므로, 넓게 버리면 게이트도
+        # 같이 눈이 멀어 '잔류 0' 으로 보고한다.
         host = next((record for record in scn.records
                      if record.start <= off < record.end), None)
-        if host is None or operand + 1 >= host.end - 1:
+        if host is None or operand >= host.end:
             continue
         disp = struct.unpack_from("<h", buf, operand)[0]
         tgt = operand + disp
@@ -507,12 +512,12 @@ def harden_against_ff_operands(src, replacements, rebuild, *, rounds=400, verbos
         grow = []
         pre = parse_scenarios(out)      # 재조준 전 (경계가 레트일과 같은 상태)
         for a, b, c in zip(sj, sk, pre):
-            # 레코드 수가 같아도 새 변위에 FF가 들어가면 다음 스캔에서
-            # 스크립트가 중간에 끊길 수 있다. 이 경우는 경계 수가 아니라
-            # `_bad_operand_targets`를 기준으로 앞 레코드를 한 칸 늘린다.
-            bad_targets = _bad_operand_targets(fixed, c)
-            if (len(a.records) == len(b.records) and not bad_targets) or a.index in unsafe:
+            # 종료 조건은 **레코드 경계 수 일치** 하나뿐이다. 여기에
+            # `_bad_operand_targets` 가 비어야 한다는 조건을 더하면(v0.11.45)
+            # 이미 맞춰진 시나리오를 계속 늘려 400회 안에 수렴하지 못한다.
+            if len(a.records) == len(b.records) or a.index in unsafe:
                 continue
+            bad_targets = _bad_operand_targets(fixed, c)
             # 어긋남을 만든 포인터의 **타깃**을 찾아, 그 바로 앞 레코드를 늘린다.
             # 레코드 0 처럼 포인터가 스무 개씩 든 스크립트 레코드를 통째로 늘리면
             # 그 안의 변위가 한꺼번에 움직여 서로를 깨뜨려 영영 안 맞는다.
