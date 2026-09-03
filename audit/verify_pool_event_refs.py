@@ -8,8 +8,13 @@ rec0+0x85 이 정확히 그랬고(피연산자의 낮은 바이트가 레코드 
 자리), 제2차 초반 이벤트가 남의 레코드 한가운데로 뛰어 정지했다(#39).
 
 불변식:
-    레트일에서 **레코드 시작을 겨누는** 대사 포인터는, 배포본에서도
-    **같은 서수의 레코드 시작**을 겨눠야 한다.
+    레트일에서 **레코드 시작을 겨누던** 대사 포인터는, 배포본에서도
+    **어떤 레코드의 시작**에 착지해야 한다.
+
+서수(몇 번째 레코드인가)로 판정하지 않는다. 변위가 0xFF 를 품으면 레코드 훑기가
+레트일과 다른 데서 끊겨 서수가 밀리기 때문이다(제2차 sc4). 반면 **실패 양상은 늘
+같다** — 참조가 레코드 시작이 아닌 곳에 착지해 스크립트가 남의 레코드 한가운데로
+뛴다. 그 하나만 본다.
 """
 from __future__ import annotations
 import os, struct, sys
@@ -29,6 +34,30 @@ from analyze_sce_relocation import parse_scenarios, iter_pointer_sites  # noqa: 
 FILES = {"제2차": "SECOND/2_SCE.BIN", "제3차": "THIRD/3_SCE.BIN", "EX": "EX/E_SCE.BIN"}
 
 
+def _operand_mask(jp: bytes, scn, start: int, end: int) -> set[int]:
+    """[start, end) 안에서 대사 포인터의 2바이트 피연산자가 차지하는 자리."""
+    mask: set[int] = set()
+    for off, operand, _op in iter_pointer_sites(jp, start, end):
+        for k in (operand, operand + 1):
+            if start <= k < end:
+                mask.add(k)
+    return mask
+
+
+def _prefix_matches(jp: bytes, j_start: int, ko: bytes, k_start: int,
+                    rel: int, scn, host: int) -> bool:
+    """레코드 시작부터 참조 자리까지가 같은가 — 피연산자 자리는 빼고 본다."""
+    if j_start + rel > len(jp) or k_start + rel > len(ko):
+        return False
+    mask = _operand_mask(jp, scn, j_start, j_start + rel)
+    for i in range(rel):
+        if j_start + i in mask:
+            continue
+        if jp[j_start + i] != ko[k_start + i]:
+            return False
+    return True
+
+
 def check(ko: bytes, jp: bytes, label: str) -> int:
     bj, bk = parse_scenarios(jp), parse_scenarios(ko)
     if len(bj) != len(bk):
@@ -41,22 +70,29 @@ def check(ko: bytes, jp: bytes, label: str) -> int:
             bad += 1
             continue
         starts = {r.start: i for i, r in enumerate(sj.records)}
+        ko_starts = {r.start for r in sk.records}
         for off, operand, _op in iter_pointer_sites(jp, sj.pool_start, sj.record_data_end):
             host = next((i for i, r in enumerate(sj.records) if r.start <= off < r.end), None)
             if host is None or operand >= sj.records[host].end:
                 continue
-            # 이벤트 스크립트 레코드는 재번역되지 않으므로 길이가 그대로다. 길이가
-            # 달라진 레코드는 텍스트라 host 상대 오프셋이 대응하지 않는다 — 건너뛴다.
+            # host 레코드 **길이**로 거르면, 변위가 0xFF 를 품어 레코드 훑기가
+            # 다른 데서 끊긴 자리(제2차 sc4)를 검사에서 통째로 빼 버린다. 그건
+            # 정확히 이 게이트가 잡아야 할 자리다. 길이 대신 **레코드 시작부터
+            # 참조 자리까지의 바이트가 같은지**로 판정한다. 이벤트 스크립트 본문은
+            # 재번역되지 않으므로, 앞부분이 같으면 상대 오프셋 매핑이 성립한다
+            # (달라질 수 있는 것은 다른 참조의 2바이트 피연산자뿐이다).
             hj, hk = sj.records[host], sk.records[host]
-            if hj.end - hj.start != hk.end - hk.start:
+            rel = off - hj.start
+            if hk.start + rel + 3 > len(ko):
+                continue
+            if not _prefix_matches(jp, hj.start, ko, hk.start, rel, sj, host):
                 continue
             disp = struct.unpack_from("<h", jp, operand)[0]
             ordinal = starts.get(operand + disp)
             if ordinal is None:
                 continue                       # 레코드 시작을 안 겨누면 이벤트 참조가 아니다
             seen += 1
-            rel = off - sj.records[host].start
-            k_off = sk.records[host].start + rel
+            k_off = hk.start + rel
             k_operand = k_off + (operand - off)
             if k_operand + 2 > len(ko):
                 print(f"  [실패] {label} sc{si} rec{host}+0x{rel:X}: 피연산자가 파일 밖")
@@ -65,10 +101,16 @@ def check(ko: bytes, jp: bytes, label: str) -> int:
             if ko[k_off] != jp[off]:
                 continue                       # 옵코드가 다르면 대응하는 자리가 아니다
             k_disp = struct.unpack_from("<h", ko, k_operand)[0]
-            want = sk.records[ordinal].start
-            if k_operand + k_disp != want:
+            k_tgt = k_operand + k_disp
+            # 판정 기준은 **착지 지점**이다. 서수 대응은 레코드 분할이 흔들리면
+            # (변위가 0xFF 를 품으면 레코드 훑기가 다른 데서 끊긴다) 못 믿는다.
+            # 반면 실패 양상은 늘 같다 — 참조가 **레코드 시작이 아닌 곳**에 착지해
+            # 스크립트가 남의 레코드 한가운데로 뛴다. 그것만 본다.
+            if k_tgt not in ko_starts:
+                near = max((x for x in ko_starts if x <= k_tgt), default=None)
+                off_in = f", 레코드 시작 0x{near:X} 에서 +{k_tgt - near}" if near else ""
                 print(f"  [실패] {label} sc{si} rec{host}+0x{rel:X}: "
-                      f"0x{k_operand + k_disp:X} 를 겨눔, 서수 {ordinal} 은 0x{want:X}")
+                      f"0x{k_tgt:X} 는 레코드 시작이 아니다{off_in}")
                 bad += 1
     print(f"  {label:5} 레코드 참조 {seen}건 검사, 스테일 {bad}건")
     return bad
@@ -95,7 +137,7 @@ def main() -> int:
     if bad:
         print(f"FAIL 풀 이벤트 참조 스테일 {bad}건")
         return 1
-    print("PASS 모든 풀 이벤트 참조가 같은 서수의 레코드를 겨눈다")
+    print("PASS 모든 풀 이벤트 참조가 레코드 시작에 착지한다")
     return 0
 
 

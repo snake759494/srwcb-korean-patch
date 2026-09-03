@@ -141,6 +141,12 @@ def main() -> None:
             [str(REPO / "audit" / "verify_sce_script.py"), "--version", a.version])
         run("풀 이벤트 참조 검증",
             [str(REPO / "audit" / "verify_pool_event_refs.py"), "--version", a.version])
+        run("작전목적 머리글 검증",
+            [str(REPO / "audit" / "verify_record_prefix.py"), "--version", a.version])
+        run("BMESS 목차표 사본 검증",
+            [str(REPO / "audit" / "verify_bmess_tables.py"), "--version", a.version])
+        run("게이트 판별력 검증",
+            [str(REPO / "audit" / "verify_gate_power.py"), "--version", a.version])
         run("대사 페이지 길이 검증",
             [str(REPO / "audit" / "verify_page_bytes.py"), "--version", a.version])
         run("용어 통일 검증",
