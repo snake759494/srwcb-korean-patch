@@ -1,6 +1,6 @@
 # v0.11.2 — 제3차 유닛 '타입' 칸·출격 화면 깨진 글자 수정
 
-[#5](https://github.com/snake7594/srwcb-korean-patch/issues/5) 에서 제보해 주신 제3차
+[#5](https://github.com/snake759494/srwcb-korean-patch/issues/5) 에서 제보해 주신 제3차
 UI 항목 중 **두 곳**을 고쳤습니다. 나머지 두 곳은 아직 남아 있습니다(아래 참고).
 
 ## 고친 것

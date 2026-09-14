@@ -1,7 +1,7 @@
 # v0.11.47 — 제2차 페이즈 UI 최종 반영
 
-이번 릴리스는 GitHub 이슈 [#34](https://github.com/snake7594/srwcb-korean-patch/issues/34)의
-제2차 페이즈 종료 화면을 최종 컴플리트 박스 이미지까지 반영하고, [#35](https://github.com/snake7594/srwcb-korean-patch/issues/35)의
+이번 릴리스는 GitHub 이슈 [#34](https://github.com/snake759494/srwcb-korean-patch/issues/34)의
+제2차 페이즈 종료 화면을 최종 컴플리트 박스 이미지까지 반영하고, [#35](https://github.com/snake759494/srwcb-korean-patch/issues/35)의
 타이틀 메뉴 통일을 포함합니다.
 
 ## #34 패치

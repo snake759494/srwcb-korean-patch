@@ -23,11 +23,11 @@ v0.11.50에서도 문장은 온전히 들어갔지만, 일반 PC용 글꼴을 16
 
 ### EX 오프닝 인용문
 
-![EX 오프닝 인용문 — v0.11.51](https://raw.githubusercontent.com/snake7594/srwcb-korean-patch/v0.11.51/docs/assets/v0.11.51/ex-opening-quote.png)
+![EX 오프닝 인용문 — v0.11.51](https://raw.githubusercontent.com/snake759494/srwcb-korean-patch/v0.11.51/docs/assets/v0.11.51/ex-opening-quote.png)
 
 ### EX 보조 인용문
 
-![EX 보조 인용문 — v0.11.51](https://raw.githubusercontent.com/snake7594/srwcb-korean-patch/v0.11.51/docs/assets/v0.11.51/ex-supplement-quote.png)
+![EX 보조 인용문 — v0.11.51](https://raw.githubusercontent.com/snake759494/srwcb-korean-patch/v0.11.51/docs/assets/v0.11.51/ex-supplement-quote.png)
 
 ## 검증
 
@@ -35,7 +35,7 @@ v0.11.50에서도 문장은 온전히 들어갔지만, 일반 PC용 글꼴을 16
 - `python build_all.py --only 8 --version v0.11.51` — 글리프·레코드·포인터·오버플로 감사 통과
 - 미번역 레코드 0건, 폭/줄 오버플로 0건, 깨진 레코드 0건, 이벤트 포인터 잔류 0건
 
-릴리즈: https://github.com/snake7594/srwcb-korean-patch/releases/tag/v0.11.51
+릴리즈: https://github.com/snake759494/srwcb-korean-patch/releases/tag/v0.11.51
 
-참고로 GitHub 이슈 [#20](https://github.com/snake7594/srwcb-korean-patch/issues/20)의 동적 한 줄은
+참고로 GitHub 이슈 [#20](https://github.com/snake759494/srwcb-korean-patch/issues/20)의 동적 한 줄은
 정적 C_SMAP 자산이 아니므로 이번 릴리즈의 해결 범위에 포함하지 않았습니다.

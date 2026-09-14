@@ -1,6 +1,6 @@
 # v0.11.48 — 제2차 페이즈 종료 문구 겹침 수정
 
-이번 릴리스는 GitHub 이슈 [#37](https://github.com/snake7594/srwcb-korean-patch/issues/37)의
+이번 릴리스는 GitHub 이슈 [#37](https://github.com/snake759494/srwcb-korean-patch/issues/37)의
 제2차 페이즈 종료 화면을 보완합니다.
 
 ## #37 원인과 패치

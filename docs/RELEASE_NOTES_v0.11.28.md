@@ -1,6 +1,6 @@
 # v0.11.28 — 세이브 화면 정렬 + '네/아뇨'
 
-이슈 [#6](https://github.com/snake7594/srwcb-korean-patch/issues/6) 제보 세 가지를
+이슈 [#6](https://github.com/snake759494/srwcb-korean-patch/issues/6) 제보 세 가지를
 전부 고쳤습니다. 앞의 둘은 **원인이 하나**였습니다.
 
 ## 1·2. 세이브 화면 — `자료01` 들여쓰기 / `슬롯1` 이 칸에 걸침

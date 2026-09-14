@@ -1,6 +1,6 @@
 # v0.11.29 — 대사가 통째로 밀리던 진짜 원인 (`B9 03`)
 
-이슈 [#8](https://github.com/snake7594/srwcb-korean-patch/issues/8) 의 **제3차
+이슈 [#8](https://github.com/snake759494/srwcb-korean-patch/issues/8) 의 **제3차
 12~16화 대사 밀림**은 재조준을 놓친 **대사 포인터 옵코드 하나** 때문이었습니다.
 
 ## 무엇이 잘못됐나

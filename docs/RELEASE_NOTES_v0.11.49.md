@@ -1,7 +1,7 @@
 # v0.11.49 — EX 오프닝·제3차 엔딩 그래픽 패치
 
-이번 릴리스는 GitHub 이슈 [#20](https://github.com/snake7594/srwcb-korean-patch/issues/20)과
-[#21](https://github.com/snake7594/srwcb-korean-patch/issues/21)을 다시 추적해,
+이번 릴리스는 GitHub 이슈 [#20](https://github.com/snake759494/srwcb-korean-patch/issues/20)과
+[#21](https://github.com/snake759494/srwcb-korean-patch/issues/21)을 다시 추적해,
 제2차에서 이미 검증한 **세이브스테이트 VRAM 역검색 → TIM 원본 폭 유지 → 제자리 재압축**
 경로로 그래픽 자산을 패치합니다.
 
@@ -13,23 +13,23 @@
 
 ### EX 오프닝 인용문·프롤로그
 
-![EX 오프닝 인용문과 프롤로그](https://raw.githubusercontent.com/snake7594/srwcb-korean-patch/main/docs/assets/v0.11.49/ex-opening.png)
+![EX 오프닝 인용문과 프롤로그](https://raw.githubusercontent.com/snake759494/srwcb-korean-patch/main/docs/assets/v0.11.49/ex-opening.png)
 
 ### EX 보조 인용문·내레이션
 
-![EX 보조 인용문과 내레이션](https://raw.githubusercontent.com/snake7594/srwcb-korean-patch/main/docs/assets/v0.11.49/ex-supplement.png)
+![EX 보조 인용문과 내레이션](https://raw.githubusercontent.com/snake759494/srwcb-korean-patch/main/docs/assets/v0.11.49/ex-supplement.png)
 
 ### 제3차 예고편
 
-![제3차 예고편 그래픽](https://raw.githubusercontent.com/snake7594/srwcb-korean-patch/main/docs/assets/v0.11.49/third-trailer.png)
+![제3차 예고편 그래픽](https://raw.githubusercontent.com/snake759494/srwcb-korean-patch/main/docs/assets/v0.11.49/third-trailer.png)
 
 ### 제3차 엔딩·라스트 배틀 후반부
 
-![제3차 엔딩 그래픽](https://raw.githubusercontent.com/snake7594/srwcb-korean-patch/main/docs/assets/v0.11.49/third-ending.png)
+![제3차 엔딩 그래픽](https://raw.githubusercontent.com/snake759494/srwcb-korean-patch/main/docs/assets/v0.11.49/third-ending.png)
 
 ### 제3차 스태프롤
 
-![제3차 스태프롤 그래픽](https://raw.githubusercontent.com/snake7594/srwcb-korean-patch/main/docs/assets/v0.11.49/credits.png)
+![제3차 스태프롤 그래픽](https://raw.githubusercontent.com/snake759494/srwcb-korean-patch/main/docs/assets/v0.11.49/credits.png)
 
 ## EX 오프닝 — #21
 

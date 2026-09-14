@@ -1,7 +1,7 @@
 # v0.11.1 — 대사 밀림·꼬임, 승리/패배조건, 전투 대사 넘침 수정
 
-제보해 주신 [#4](https://github.com/snake7594/srwcb-korean-patch/issues/4)(제2차)
-[#5](https://github.com/snake7594/srwcb-korean-patch/issues/5)(제3차)의 스크린샷을
+제보해 주신 [#4](https://github.com/snake759494/srwcb-korean-patch/issues/4)(제2차)
+[#5](https://github.com/snake759494/srwcb-korean-patch/issues/5)(제3차)의 스크린샷을
 전부 뜯어본 결과, 서로 달라 보이던 증상들이 **한 가지 원인**에서 나왔습니다.
 
 ## 원인 — 대사 상자 크기를 잘못 알고 있었습니다

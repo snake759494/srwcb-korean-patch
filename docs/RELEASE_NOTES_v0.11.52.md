@@ -2,8 +2,8 @@
 
 ## 변경 내용
 
-GitHub 열린 이슈 [#38](https://github.com/snake7594/srwcb-korean-patch/issues/38)과
-제3차 라스트 배틀 이슈 [#20](https://github.com/snake7594/srwcb-korean-patch/issues/20)을
+GitHub 열린 이슈 [#38](https://github.com/snake759494/srwcb-korean-patch/issues/38)과
+제3차 라스트 배틀 이슈 [#20](https://github.com/snake759494/srwcb-korean-patch/issues/20)을
 제2차·제3차·EX의 공통 실행 경로와 대조해 다시 검증했습니다.
 
 ### #38 — 잘못된 CUE를 만드는 간편 적용기 차단
@@ -46,11 +46,11 @@ v0.11.51에서 확정한 EX 인용문 PNG를 회귀 확인용으로 함께 표�
 
 ### EX 오프닝 인용문
 
-![EX 오프닝 인용문 — v0.11.51 기준](https://raw.githubusercontent.com/snake7594/srwcb-korean-patch/v0.11.51/docs/assets/v0.11.51/ex-opening-quote.png)
+![EX 오프닝 인용문 — v0.11.51 기준](https://raw.githubusercontent.com/snake759494/srwcb-korean-patch/v0.11.51/docs/assets/v0.11.51/ex-opening-quote.png)
 
 ### EX 보조 인용문
 
-![EX 보조 인용문 — v0.11.51 기준](https://raw.githubusercontent.com/snake7594/srwcb-korean-patch/v0.11.51/docs/assets/v0.11.51/ex-supplement-quote.png)
+![EX 보조 인용문 — v0.11.51 기준](https://raw.githubusercontent.com/snake759494/srwcb-korean-patch/v0.11.51/docs/assets/v0.11.51/ex-supplement-quote.png)
 
 ## 검증
 
@@ -70,4 +70,4 @@ v0.11.51에서 확정한 EX 인용문 PNG를 회귀 확인용으로 함께 표�
 이번 릴리즈에서는 완전히 재현·확인된 해결 이슈가 없어 이슈를 자동으로 닫지
 않았습니다.
 
-릴리즈: https://github.com/snake7594/srwcb-korean-patch/releases/tag/v0.11.52
+릴리즈: https://github.com/snake759494/srwcb-korean-patch/releases/tag/v0.11.52

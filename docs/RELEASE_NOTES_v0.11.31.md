@@ -1,6 +1,6 @@
 # v0.11.31 — 출격·부대표 목록 열 위치
 
-이슈 [#7](https://github.com/snake7594/srwcb-korean-patch/issues/7) 에 남아 있던
+이슈 [#7](https://github.com/snake759494/srwcb-korean-patch/issues/7) 에 남아 있던
 두 건입니다. 둘 다 **커서 이동 한 칸** 차이였습니다.
 
 ## 목록 한 줄이 그려지는 방식

@@ -63,4 +63,4 @@
       → .bin 2개를 이 폴더에 넣었는지, 파일명이 위와 같은지 확인하세요.
 
 ------------------------------------------------------------------------
-GitHub: https://github.com/snake7594/srwcb-korean-patch
+GitHub: https://github.com/snake759494/srwcb-korean-patch

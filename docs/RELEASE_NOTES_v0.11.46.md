@@ -1,6 +1,6 @@
 # v0.11.46 — 컴플리트 박스 타이틀 메뉴 통일
 
-이번 릴리스는 GitHub 이슈 [#35](https://github.com/snake7594/srwcb-korean-patch/issues/35)의
+이번 릴리스는 GitHub 이슈 [#35](https://github.com/snake759494/srwcb-korean-patch/issues/35)의
 “제2차만 적용된 타이틀 메뉴” 문제를 해결합니다.
 
 ## 패치 내용
@@ -14,7 +14,7 @@
 
 ## #34 후속 확인
 
-이슈 [#34](https://github.com/snake7594/srwcb-korean-patch/issues/34)의 중간
+이슈 [#34](https://github.com/snake759494/srwcb-korean-patch/issues/34)의 중간
 `font_extracted`에는 제2차 페이즈 종료 제어폭 패치가 있었지만, v0.11.46 최종 CB 조립기가
 오래된 v0.8.7 이미지에서 `SECOND.WAR`를 다시 읽어 최종 이미지에서는 `FC 10`이 남았습니다.
 이 사실은 이슈를 닫기 전에 최종 파일 대조로 확인했습니다. 최종 이미지 입력 경로를 고친
