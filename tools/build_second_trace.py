@@ -8,12 +8,12 @@
 
 ## 심는 것
 
-* 디스패처 루프 머리 `0x80062B5C`(`lw $v0,0x28c($gp)`)를 `j TRAMP` 로 바꾼다.
-  바로 뒤 `0x80062B60` 은 원래 `nop` 이라 지연슬롯으로 그대로 둔다.
-* 트램폴린은 미사용 패딩 `0x80120F64`(514B, 두 세이브스테이트에서 실행 중에도
-  전부 0 인 것을 확인)에 놓는다.
-* 로그 버퍼는 모듈 끝을 0x1000 늘려 확보한다(`audit/expand_battle_scratch` 와 같은
-  수술: 모듈끝 워드 · BSS 클리어 종료 · 힙 베이스를 함께 민다).
+* 디스패처 루프 머리 `0x800693AC`(`lw $v0,0x28c($gp)`)를 `j TRAMP` 로 바꾼다.
+  바로 뒤 `0x800693B0` 은 원래 `nop` 이라 지연슬롯으로 그대로 둔다.
+* 트램폴린·링버퍼는 **PS-EXE 본문을 옛 모듈 끝 너머로 늘려** 그 뒤에 둔다
+  (t_size · 모듈끝 워드 · 힙 베이스를 새 끝으로, BSS 클리어 끝은 옛 끝 그대로).
+  파일이 커지므로 이미지에서는 `assemble()` 로 SECOND.WAR 만 뒤로 재배치한다.
+  (1차 시도의 in-file 패딩 0x801229F0 은 초기화 때 0 으로 지워져 실패했다.)
 
 ## 로그 형식 (LOG = 옛 모듈 끝)
 
@@ -48,8 +48,19 @@ import srwcb_paths as _P                        # noqa: E402
 import assemble_image as AI                     # noqa: E402
 
 BASE, FOFF = 0x80010000, 0x800
-TRAMP = 0x801229F0          # 미사용 패딩 (실행 중에도 3408B 전부 0)
-LOG   = 0x80122B00          # 링버퍼도 같은 패딩 안에 둔다 (모듈 크기 안 건드림)
+# 1차 시도(0x801229F0 패딩)는 실패했다: 그 자리는 게임 초기화가 0 으로 지우는 데이터라
+# 트램폴린이 사라져 훅이 0(nop) 을 타고 내려가 BIOS 로 빠졌다(#1 세이브 3장으로 확인).
+# 코드 영역에 진짜 패딩이 없으므로 **PS-EXE 본문을 옛 모듈 끝 너머까지 늘려** 그 뒤에
+# 트램폴린과 링버퍼를 둔다. BSS 클리어 [0x8013A370,0x8015BE70) 는 그대로 두어 우리
+# 코드가 지워지지 않게 하고, 힙 베이스·모듈끝 워드·t_size 만 새 끝으로 민다.
+# 모듈 끝은 레트일 0x8015BE70 이지만 한글판은 전투 스크래치 확장으로 이미 밀려 있다
+# (v0.11.55: 0x8015C670). 그래서 word@0x800 에서 **읽어서** 잡는다. 아래는 자리표시.
+OLD_END = 0x8015C670        # 모듈 끝 (word@0x800, BSS 클리어 끝, 힙 베이스) — patch() 가 갱신
+TRAMP = OLD_END             # 새로 늘린 본문의 머리
+LOG   = OLD_END + 0x400
+NEW_END = 0x8015D800        # 새 본문 끝 (섹터 배수) — patch() 가 갱신
+BSS_SITE  = 0x80053B54      # lui v1,0x8016 / addiu v1,-16784  (건드리지 않음, 확인만)
+HEAP_SITE = 0x80053B9C      # lui a0,0x8016 / addiu a0,-16784  -> NEW_END
 HOOK = 0x800693AC           # 디스패처 루프 머리 (lw v0,0x28c(gp))
 HOOK_RET = 0x800693B4       # 원래 명령 + 지연슬롯 다음
 RESERVE = 0x1000
@@ -150,18 +161,41 @@ def sites(buf):
 
 
 def patch(war: bytes, log=print):
-    """모듈 크기를 안 건드린다 — 트램폴린과 링버퍼를 같은 미사용 패딩에 둔다."""
+    """본문을 OLD_END 까지 0 으로 늘리고 그 뒤 [OLD_END, NEW_END) 에 코드·로그를 둔다."""
     b = bytearray(war)
+    if b[:8] != b"PS-X EXE":
+        raise SystemExit("PS-X EXE 헤더가 아니다")
+    t_addr, t_size = struct.unpack_from("<II", b, 0x18)
+    if t_addr != BASE or FOFF + t_size != len(b):
+        raise SystemExit(f"헤더/길이 불일치 t_addr={t_addr:08X} t_size={t_size:X} len={len(b):X}")
+    global OLD_END, TRAMP, LOG, NEW_END
+    OLD_END = struct.unpack_from("<I", b, 0x800)[0]
+    if not 0x80130000 < OLD_END < 0x80170000:
+        raise SystemExit(f"모듈끝 워드가 이상하다: {OLD_END:08X}")
+    TRAMP, LOG = OLD_END, OLD_END + 0x400
+    NEW_END = (OLD_END + RESERVE + 0x7FF) & ~0x7FF
+    def site(a, reg):
+        o = FOFF + (a - BASE)
+        hi, lo = struct.unpack_from("<II", b, o)
+        exp_hi = 0x3C000000 | (reg << 16) | ((OLD_END + 0x8000) >> 16)
+        exp_lo = 0x24000000 | (reg << 21) | (reg << 16) | (OLD_END & 0xFFFF)
+        if (hi, lo) != (exp_hi, exp_lo):
+            raise SystemExit(f"{a:08X} 명령이 예상과 다르다: {hi:08X} {lo:08X}")
+        return o
+    site(BSS_SITE, 3)                       # 그대로 둔다 — 우리 코드가 지워지면 안 된다
+    heap_off = site(HEAP_SITE, 4)
+    # 본문 확장
+    b.extend(bytes(FOFF + (NEW_END - BASE) - len(b)))
+    struct.pack_into("<I", b, 0x1C, NEW_END - BASE)          # t_size
+    struct.pack_into("<I", b, 0x800, NEW_END)                # 모듈 끝
+    struct.pack_into("<I", b, heap_off + 4, 0x24840000 | (NEW_END & 0xFFFF))  # addiu a0
+    assert ((NEW_END + 0x8000) >> 16) == ((OLD_END + 0x8000) >> 16)
+    log(f"  본문 {t_size:X} -> {NEW_END-BASE:X}, 힙 베이스/모듈끝 -> 0x{NEW_END:08X} (BSS 클리어 끝 0x{OLD_END:08X} 유지)")
     need = 0x10 + RING * 16
-    off_log = FOFF + (LOG - BASE)
-    if any(b[off_log + i] for i in range(need)):
-        raise SystemExit("로그 버퍼 자리가 비어 있지 않다")
     code = trampoline(LOG)
+    if TRAMP + len(code) * 4 > LOG or LOG + need > NEW_END:
+        raise SystemExit("배치가 넘친다")
     off = FOFF + (TRAMP - BASE)
-    if any(b[off + i] for i in range(len(code) * 4)):
-        raise SystemExit("트램폴린 자리가 비어 있지 않다")
-    if TRAMP + len(code) * 4 > LOG:
-        raise SystemExit("트램폴린이 로그 버퍼를 침범한다")
     for i, w in enumerate(code):
         struct.pack_into("<I", b, off + i * 4, w)
     log(f"  트램폴린 {len(code)}명령 @0x{TRAMP:08X}")
@@ -177,25 +211,21 @@ def patch(war: bytes, log=print):
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--version", default="v0.11.54")
+    ap.add_argument("--version", default="v0.11.55")
     ap.add_argument("--out", type=Path)
     a = ap.parse_args()
     src = _P.OUT / f"Super Robot Taisen Complete Box Korean {a.version} (Track 1).bin"
     if not src.exists():
         raise SystemExit(f"[없음] {src}")
-    out = a.out or (_P.OUT / f"Super Robot Taisen Complete Box Korean {a.version}-trace2 (Track 1).bin")
+    out = a.out or (_P.OUT / f"Super Robot Taisen Complete Box Korean {a.version}-trace3 (Track 1).bin")
     import shutil
-    shutil.copyfile(src, out)
-    with AI.RawMode2Image(out) as m:
+    with AI.RawMode2Image(src) as m:
         _, entries = AI.read_tree(m)
     e = {x.path.strip("/"): x for x in entries}["SECOND/SECOND.WAR"]
-    war = AI.read_file(out, e.lba, e.size)
+    war = AI.read_file(src, e.lba, e.size)
     new, log_base = patch(war)
-    if len(new) != len(war):
-        raise SystemExit("크기가 바뀌었다")
-    w = AI.Writer(out)
-    w.put_file(e.lba, new)
-    w.close()
+    # 커진 파일은 제자리에 못 넣는다 — 한글판 이미지를 기준으로 SECOND.WAR 만 재배치.
+    AI.assemble(src, out, {"SECOND/SECOND.WAR": new})
     cue = out.with_suffix(".cue")
     # 레트일 컴플리트 박스는 **2트랙**이다(트랙 2 = CD-DA). 트랙 2 를 빠뜨리면
     # CD-DA 를 읽는 장면에서 정식 빌드와 다르게 동작한다 — 진단 빌드가 원판과

@@ -235,7 +235,7 @@ def assemble(retail: Path, out: Path, files: dict[str, bytes], quiet=False) -> d
         hot = [plan[p][0] for p in plan if plan[p][0] < end]
         print(f"  배치: 안쪽 {len(append) - len(far)}개 / 끝에 붙임 {len(far)}개"
               + (f" ({', '.join(far)})" if far else "")
-              + f" — 안쪽 최대 LBA {max(hot):,}")
+              + (f" — 안쪽 최대 LBA {max(hot):,}" if hot else ""))
 
     # 제3차 로더는 3_SCE/3_DEAD 위치를 실행파일에 박아 둔다 — 새 LBA 로 다시 쓴다.
     refs = json.loads(LBA_REFS.read_text(encoding="utf-8"))

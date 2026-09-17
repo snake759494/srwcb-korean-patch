@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """추적 빌드가 남긴 스크립트 제어흐름 로그를 세이브스테이트에서 읽는다.
 
-`tools/build_second_trace.py` 가 심은 링버퍼(RAM 0x80122B00)를 DuckStation 세이브스테이트
+`tools/build_second_trace.py` 가 심은 링버퍼(RAM 0x8015CA70)를 DuckStation 세이브스테이트
 (`.sav`)에서 꺼내 사람이 읽을 수 있게 푼다. 각 목적지가 어느 시나리오 블록/실행파일
 안인지까지 붙여 준다.
 """
@@ -23,7 +23,7 @@ import srwcb_paths as _P                                    # noqa: E402
 import assemble_image as AI                                 # noqa: E402
 from analyze_sce_relocation import parse_scenarios          # noqa: E402
 
-LOG = 0x80122B00
+LOG = 0x8015CA70   # v0.11.55-trace3: 옛 모듈 끝(0x8015C670)+0x400. 1차(0x80122B00)는 폐기
 RING = 128
 
 
