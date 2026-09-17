@@ -44,9 +44,9 @@ def savestate_ram(sav: Path, war: bytes) -> bytes:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("sav", type=Path)
-    ap.add_argument("--version", default="v0.11.54")
+    ap.add_argument("--version", default="v0.11.55")
     a = ap.parse_args()
-    img = _P.OUT / f"Super Robot Taisen Complete Box Korean {a.version}-trace (Track 1).bin"
+    img = _P.OUT / f"Super Robot Taisen Complete Box Korean {a.version}-trace3 (Track 1).bin"
     if not img.exists():
         raise SystemExit(f"[없음] 추적 이미지: {img}")
     with AI.RawMode2Image(img) as m:
@@ -80,7 +80,7 @@ def main() -> None:
 
     count = U32(LOG)
     print(f"기록 횟수 {count}  (링 {RING}칸)")
-    print(f"현재 스크립트 포인터 0x{U32(0x80132E98 + 0x288):08X}  {where(U32(0x80132E98 + 0x288))}")
+    print(f"현재 스크립트 포인터 0x{U32(0x8013A1F0 + 0x288):08X}  {where(U32(0x8013A1F0 + 0x288))}")
     print(f"RAM 에 올라온 시나리오: " + ", ".join(f"sc{i}@0x{b:08X}" for i, b, _, _ in loaded))
     if count == 0:
         raise SystemExit("\n로그가 비었다 — 추적 빌드가 아니거나 아직 아무 점프도 안 했다")
