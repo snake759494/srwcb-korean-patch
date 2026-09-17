@@ -168,15 +168,17 @@ def main() -> None:
         for key, steps in (
             ("srw2", [("제2차 단독판", REPO / "standalone" / "build_standalone.py")]),
             ("srw3", [("제3차 단독판 실행파일", REPO / "standalone3" / "port_exe3.py"),
+                      ("제3차 단독판 타이틀 메뉴 그래픽", REPO / "standalone" / "build_zsmap_title_ko.py", "srw3"),
                       ("제3차 단독판 이미지", REPO / "standalone3" / "patch_iso3.py")]),
             ("srwex", [("EX 단독판 실행파일", REPO / "standalone_ex" / "port_exe_ex.py"),
+                       ("EX 단독판 타이틀 메뉴 그래픽", REPO / "standalone" / "build_zsmap_title_ko.py", "srwex"),
                        ("EX 단독판 이미지", REPO / "standalone_ex" / "patch_iso_ex.py")]),
         ):
             if not (P.WORK / key / "extracted").exists():
                 print(f"\n=== {key} 건너뜀 (setup_standalone.py 로 준비하세요)")
                 continue
-            for desc, script in steps:
-                run(desc, [str(script)])
+            for desc, script, *extra in steps:
+                run(desc, [str(script), *extra])
         run("단독판 검증", [str(REPO / "audit" / "verify_standalone.py")])
         run("예고 타이틀 카드 검증(단독판 포함)",
             [str(REPO / "audit" / "verify_eyecatch.py")])

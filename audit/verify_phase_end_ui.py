@@ -34,6 +34,9 @@ STATIC_TEXT_START = 19
 EXPECTED_STATIC_DISPLAY = "미행동 유닛이   기 있습니다"
 OLD_CONTROL = bytes.fromhex("FC 10 FC F8 82")
 NEW_CONTROL = bytes.fromhex("FC 0B FC F8 82")
+# 숫자 뒤 선택지 이동. FC 0B 로 5칸 줄인 만큼 되돌리지 않으면 네/아뇨가 왼쪽으로 밀린다(#2).
+OLD_CHOICE = bytes.fromhex("FC FE 05")
+NEW_CHOICE = bytes.fromhex("FC 03 05")
 
 
 def main() -> int:
@@ -75,6 +78,12 @@ def main() -> int:
         raise SystemExit(
             "제2차 페이즈 종료 UI 제어폭 검증 실패: "
             f"target={target:#x}, FC0B={new_count}, FC10={old_count}"
+        )
+    if record.count(NEW_CHOICE) != 1 or record.count(OLD_CHOICE) != 0:
+        raise SystemExit(
+            "제2차 페이즈 종료 UI 선택지 이동 검증 실패: "
+            f"FC0305={record.count(NEW_CHOICE)}, FCFE05={record.count(OLD_CHOICE)} "
+            "— 네/아뇨가 5칸 왼쪽으로 밀린다(#2)"
         )
     print(
         "제2차 페이즈 종료 UI 검증 통과: "

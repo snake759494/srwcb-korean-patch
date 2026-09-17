@@ -10172,6 +10172,12 @@
               "source_hex": "FC 10 FC F8 82",
               "replacement_hex": "FC 0B FC F8 82",
               "expected_count": 1
+            },
+            {
+              "_why": "숫자 앞 이동을 5칸 줄였으니(FC 10 -> FC 0B) 숫자 뒤 '네/아뇨' 로 내려가는 상대 이동도 5칸 되돌려야 선택지가 레트일 자리에 선다. 안 그러면 5칸 왼쪽으로 밀려 아래 명령 메뉴 글자와 겹친다(이슈 #2).",
+              "source_hex": "FC FE 05",
+              "replacement_hex": "FC 03 05",
+              "expected_count": 1
             }
           ]
         },

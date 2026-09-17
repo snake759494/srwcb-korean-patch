@@ -42,7 +42,9 @@ RETAIL_EXE=f"{SRW3}/extracted/SLPS_025.30"
 EFFECT_SRC = str(_P.EXTRACTED / "EFFECT.BIN")
 EFFECT_KO = str(_P.BUILD / "gfx" / "EFFECT_ko.BIN")
 INPLACE=[("SLPS_025.30;1", RETAIL_EXE, PATCHED_EXE),
-         ("EFFECT.BIN;1", EFFECT_SRC, EFFECT_KO)]
+         ("EFFECT.BIN;1", EFFECT_SRC, EFFECT_KO),
+         # 타이틀 메뉴(시작/로드/이어하기) 한글 그래픽. 크기가 같아 제자리 교체 (이슈 #3).
+         ("Z_SMAP.BIN;1", f"{SRW3}/extracted/Z_SMAP.BIN", str(_P.BUILD / "gfx" / "Z_SMAP_srw3_ko.BIN"))]
 RELOC=[("3_SCE.BIN;1", 684344, str(_P.final("THIRD/3_SCE.BIN", f"{CBR}/THIRD/3_SCE.BIN"))),
        ("BMESS3.BIN;1", 582354, str(_P.final("BMESS3.BIN", f"{CBR}/BMESS3.BIN"))),
        ("3_DEAD.BIN;1", 5754,   str(_P.final("THIRD/3_DEAD.BIN", f"{CBR}/THIRD/3_DEAD.BIN")))]
