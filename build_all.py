@@ -143,6 +143,12 @@ def main() -> None:
             [str(REPO / "audit" / "verify_pool_event_refs.py"), "--version", a.version])
         run("작전목적 머리글 검증",
             [str(REPO / "audit" / "verify_record_prefix.py"), "--version", a.version])
+        run("작전목적 창 검증 (E7 02 변위 · 블록 L)",
+            [str(REPO / "audit" / "verify_objective_windows.py"), "--version", a.version])
+        run("EX·트레이닝 장 선택 줄 칸 검증",
+            [str(REPO / "audit" / "verify_ex_chapter_menu.py"), "--version", a.version])
+        run("미등록 포인터 형식 검증 (R-OPSET)",
+            [str(REPO / "audit" / "verify_pointer_forms.py"), "--version", a.version])
         run("BMESS 목차표 사본 검증",
             [str(REPO / "audit" / "verify_bmess_tables.py"), "--version", a.version])
         run("게이트 판별력 검증",

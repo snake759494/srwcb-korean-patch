@@ -12,8 +12,16 @@
 포인터 계열 게이트에도 안 걸린다. 실제로 v0.11.53 에서 EX 헤더 6곳을 뭉개고 기존 게이트를
 전부 돌렸더니 "깨진 레코드 0" 으로 통과했다.
 
-불변식:
-    레코드 시작부터 `04 00 <창폭> 00` 끝까지의 바이트는 레트일과 완전히 같다.
+불변식 (2026-09-28 정정):
+    머리글 개수·위치(시나리오, 레코드 서수)가 레트일과 같고,
+    `04 00 <L> 00` 의 L 은 **패배조건 시작 − 2** 와 같다(objective_windows.expected_len).
+
+★ 예전 불변식("L 이 레트일과 바이트까지 같다")은 **틀렸다.** L 은 창폭이 아니라
+   패배조건 문자열의 위치다(`E7 02` 핸들러 0x800C1700 이 `blk + L + 2` 를 읽는다,
+   `tools/objective_windows.py`). 번역으로 승리조건 길이가 바뀌면 L 도 바뀌어야 한다.
+   옛 게이트는 L 을 레트일 값에 묶어 둬서, 제2차 14곳·EX 1곳의 L 이 틀린 채로 통과했고
+   그중 8화 블록이 밀려 E7 02 가 쓰레기 오프셋을 읽은 것이 제보 #1 정지다.
+   EX 머리글이 `04 XX` 로 뭉개졌던 v0.11.33 결함은 개수 검사로 계속 잡힌다.
 
 생성기(ex_gap_apply._obj_hdr, build_second_expanded_patch 의 prefix 계산)를 import 하지
 않는다 — 레트일과 최종 이미지를 직접 대조한다.
@@ -30,6 +38,7 @@ for _s in ("", "tools", "image-build"):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 import srwcb_paths as _P                                        # noqa: E402
+import objective_windows as OW                                  # noqa: E402
 import assemble_image as AI                                     # noqa: E402
 from analyze_sce_relocation import (parse_scenarios,            # noqa: E402
                                     objective_block_records)
@@ -57,7 +66,7 @@ def headers(buf: bytes) -> list[tuple[int, int, int]]:
                 if p < 0:
                     break
                 if p + 8 <= rec.end and buf[p + 7] == 0x00:
-                    out.append((si, ri, buf[p + 6]))
+                    out.append((si, ri, buf[p + 6], p + 4))
                 p += 1
     return out
 
@@ -73,14 +82,20 @@ def check(ko: bytes, jp: bytes, label: str) -> int:
         print(f"  [실패] {label}: 머리글 {len(hj)}개 -> {len(hk)}개 "
               f"({len(hj) - len(hk)}개가 사라졌다 = 머리글이 찌그러졌다)")
         bad += 1
-        gone = [x for x in hj if x not in set(hk)][:6]
-        for si, ri, w in gone:
-            print(f"          없어진 것: sc{si} rec{ri} 창폭 {w}")
+        kset = {(x[0], x[1]) for x in hk}
+        gone = [x for x in hj if (x[0], x[1]) not in kset][:6]
+        for si, ri, w, _b in gone:
+            print(f"          없어진 것: sc{si} rec{ri} L {w:#x}")
     else:
         for x, y in zip(hj, hk):
-            if x != y:
-                print(f"  [실패] {label}: sc{x[0]} rec{x[1]} 창폭 {x[2]} -> "
-                      f"sc{y[0]} rec{y[1]} 창폭 {y[2]}")
+            if (x[0], x[1]) != (y[0], y[1]):
+                print(f"  [실패] {label}: 머리글 위치 sc{x[0]} rec{x[1]} -> sc{y[0]} rec{y[1]}")
+                bad += 1
+                continue
+            need = OW.expected_len(ko, y[3])
+            if need is None or y[2] != need:
+                shown = "?" if need is None else f"{need:#x}"
+                print(f"  [실패] {label}: sc{y[0]} rec{y[1]} L {y[2]:#x} ≠ 패배조건 위치−2 {shown}")
                 bad += 1
     print(f"  {label:5} 작전목적 머리글 {len(hj)}개 검사, 위반 {bad}건")
     return bad
@@ -106,7 +121,7 @@ def main() -> int:
     if bad:
         print(f"FAIL 작전목적 헤더 {bad}건")
         return 1
-    print("PASS 작전목적 헤더가 레트일과 바이트까지 같다")
+    print("PASS 작전목적 머리글 개수·위치가 레트일과 같고 L 이 패배조건 위치와 맞는다")
     return 0
 
 

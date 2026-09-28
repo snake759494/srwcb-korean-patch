@@ -62,6 +62,13 @@ def check_file(ko: bytes, jp: bytes, label: str) -> int:
                 i = operand - a.block_start + k
                 if 0 <= i < n:
                     allowed[i] = 1
+        # 작전목적 창 `E7 02 <s16>` 도 포인터다(tools/objective_windows.py 가 다시 겨눈다)
+        import objective_windows as _OW
+        for _off, operand, _t in _OW.e7_sites(jp, a):
+            for k in (0, 1):
+                i = operand - a.block_start + k
+                if 0 <= i < n:
+                    allowed[i] = 1
         for i in range(n):
             if jp[a.block_start + i] != ko[b.block_start + i] and not allowed[i]:
                 ctx_j = jp[a.block_start + i - 4:a.block_start + i + 4].hex(" ")

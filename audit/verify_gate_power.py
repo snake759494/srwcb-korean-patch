@@ -36,6 +36,8 @@ import verify_page_bytes as G_PAGE                          # noqa: E402
 import verify_ui_runs as G_UI                               # noqa: E402
 import verify_bmess_tables as G_BM                          # noqa: E402
 import verify_record_prefix as G_PFX                        # noqa: E402
+import verify_objective_windows as G_OW                     # noqa: E402
+import objective_windows as OW                              # noqa: E402
 
 SCE = {"제2차": "SECOND/2_SCE.BIN", "제3차": "THIRD/3_SCE.BIN", "EX": "EX/E_SCE.BIN"}
 WAR = {"제2차": "SECOND/SECOND.WAR", "제3차": "THIRD/THIRD.WAR",
@@ -180,7 +182,54 @@ def fixtures():
          "작전목적 머리글 04 00 <창폭> 00 을 뭉갬 (v0.11.33, EX 목표 변경 시 정지)",
          SCE, inject_mangled_objective_header,
          lambda ko, jp, lb: G_PFX.check(ko, jp, lb)),
+        ("F-objwin-disp", "R-작전목적-창-변위",
+         "E7 02 변위를 이웃 블록으로 어긋냄 (v0.11.54, 제2차 8화 장면 끝 정지 #1)",
+         SCE, inject_stale_e7_disp,
+         lambda ko, jp, lb: G_OW.check(ko, jp, lb)),
+        ("F-objwin-len", "R-작전목적-창-길이",
+         "작전목적 블록 L 을 승리조건 종단과 다르게 (v0.11.54, 패배조건 깨짐)",
+         SCE, inject_stale_block_len,
+         lambda ko, jp, lb: G_OW.check(ko, jp, lb)),
+        ("F-objhdr-len", "R-작전목적-머리글",
+         "머리글 L 을 승리조건 종단과 다르게 — 옛 게이트는 레트일 값에 묶여 못 잡았다",
+         SCE, inject_stale_block_len,
+         lambda ko, jp, lb: G_PFX.check(ko, jp, lb)),
     ]
+
+
+def inject_stale_e7_disp(ko: bytes, jp: bytes, want: int = 2) -> tuple[bytes, int]:
+    """블록을 겨누는 E7 02 의 변위를 2바이트 앞으로 = 블록이 밀렸는데 변위가 옛 값인 상태.
+
+    v0.11.54 제2차 8화: 앞 블록의 승리조건이 2바이트 늘어 뒤 블록이 밀렸는데 E7 02 는
+    옛 변위 그대로였다 → 쓰레기 오프셋 → 10,855바이트 스택 복사 → 장면 끝 정지.
+    """
+    out = bytearray(ko)
+    n = 0
+    for b in parse_scenarios(ko):
+        for off, opnd, tgt in OW.e7_sites(ko, b):
+            if OW.is_block(ko, tgt):
+                struct.pack_into("<h", out, opnd, struct.unpack_from("<h", out, opnd)[0] - 2)
+                n += 1
+                if n >= want:
+                    return bytes(out), n
+    return bytes(out), n
+
+
+def inject_stale_block_len(ko: bytes, jp: bytes, want: int = 3) -> tuple[bytes, int]:
+    """작전목적 블록의 L 을 2 줄인다 = 승리조건을 늘리고 L 은 옛 값으로 둔 상태."""
+    out = bytearray(ko)
+    n = 0
+    for b in parse_scenarios(ko):
+        blks = {t for _, _, t in OW.e7_sites(ko, b) if OW.is_block(ko, t)}
+        blks |= set(OW.anchored_blocks(ko, b.pool_start, b.record_data_end))
+        for blk in sorted(blks):
+            L = struct.unpack_from("<H", out, blk + 2)[0]
+            if L > 6:
+                struct.pack_into("<H", out, blk + 2, L - 2)
+                n += 1
+                if n >= want:
+                    return bytes(out), n
+    return bytes(out), n
 
 
 def inject_mangled_objective_header(ko: bytes, jp: bytes, want: int = 3) -> tuple[bytes, int]:

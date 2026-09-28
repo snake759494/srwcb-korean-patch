@@ -160,9 +160,19 @@ def step_sce(files):
         # 길이를 바꾸지 않고 `00`<->`F6` 만 맞바꿔 다시 나눈다.
         fixed, wrapped = FX.rewrap_anchor_tails(fixed, jp, apply=True,
                                                 verbose=False, game=name)
+        # 작전목적 창(E7 02 → `04 00 L 00 | 승리 FF FF | 패배 FF FF`). 블록이 밀리면 변위를,
+        # 승리조건 길이가 바뀌면 L 을 다시 써야 한다. 안 그러면 E7 02 가 쓰레기 오프셋을
+        # 읽어 수 KB 를 스택에 복사하고 장면 끝에서 정지한다(제보 #1, 제2차 8화).
+        import objective_windows as OW
+        fixed, ow_disp, ow_len, ow_probs = OW.fix(fixed, jp)
+        if ow_probs:
+            for p_ in ow_probs[:10]:
+                print("   !!", p_)
+            raise SystemExit(f"{name}: 작전목적 창 정리 불가 {len(ow_probs)}건")
         files[name] = fixed
         _same_record_split(files[name], jp, name)
-        print(f"  {name}: 이벤트 참조 재조준 {need_n}곳 (풀앞 {pre_n}곳)")
+        print(f"  {name}: 이벤트 참조 재조준 {need_n}곳 (풀앞 {pre_n}곳) · "
+              f"작전목적 창 변위 {ow_disp}곳 · 길이 {ow_len}곳")
 
 
 def step_battle(files):
